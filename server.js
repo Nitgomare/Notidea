@@ -469,9 +469,9 @@ async function route(req, res) {
           } catch (e) { /* 交给用户手动重启 */ }
           setTimeout(() => process.exit(0), 300);
         }, 500);
-        return json(res, 200, { ok: true, latest, size: dl.size, note: '正在替换文件并重启服务' });
+        return json(res, 200, { ok: true, latest, size: dl.size, from: dl.from, note: '正在替换文件并重启服务' });
       } catch (e) {
-        return json(res, 500, { error: String(e.message || e) });
+        return json(res, 500, { error: String(e.message || e), url: UPDATE_RELEASE_URL });
       }
     }
     if (p === '/api/config' && req.method === 'POST') {
@@ -822,27 +822,60 @@ async function checkUpdate(force) {
 
 /* ---------------- 自动更新：下载 → 解压 → 覆盖 → 重启 ---------------- */
 const UPDATE_APP_ZIP = (v) => UPDATE_REPO_URL + '/releases/download/v' + v + '/flomo-local-' + v + '-app.zip';
+// GitHub 的 release 资产会跳转到 release-assets.githubusercontent.com，国内部分网络把这个域名
+// 解析到 127.0.0.1（或直接屏蔽），下载就 ECONNREFUSED。仓库里同时放一份同样的包，走 jsDelivr / raw 兜底。
+const UPDATE_MIRROR_ZIPS = (v) => [
+  'https://cdn.jsdelivr.net/gh/' + UPDATE_REPO + '@v' + v + '/updates/flomo-local-' + v + '-app.zip',
+  'https://cdn.jsdelivr.net/gh/' + UPDATE_REPO + '@main/updates/flomo-local-' + v + '-app.zip',
+  'https://raw.githubusercontent.com/' + UPDATE_REPO + '/v' + v + '/updates/flomo-local-' + v + '-app.zip',
+];
+
+function updateLog(line) {
+  try {
+    const dir = path.join(__dirname, 'data', 'update');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'download.log'), '[' + new Date().toISOString() + '] ' + line + '\r\n');
+  } catch (e) { /* 日志失败不影响流程 */ }
+}
+
+async function fetchUpdateZip(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 90000);
+  try {
+    const r = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: { 'user-agent': 'flomo-local/' + APP_VERSION },
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length < 2000 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new Error('内容不是 zip（可能被网络拦截）');
+    return buf;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function downloadUpdate(info) {
   const dir = path.join(__dirname, 'data', 'update');
   fs.mkdirSync(dir, { recursive: true });
   const zip = path.join(dir, 'app.zip');
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 180000);
-  try {
-    const r = await fetch(info.asset, {
-      signal: ctrl.signal,
-      redirect: 'follow',
-      headers: { 'user-agent': 'flomo-local/' + APP_VERSION },
-    });
-    if (!r.ok) throw new Error('下载失败 HTTP ' + r.status);
-    const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length < 2000 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new Error('下载内容不是 zip（可能被网络拦截）');
-    fs.writeFileSync(zip, buf);
-    return { zip, size: buf.length };
-  } finally {
-    clearTimeout(timer);
+  const urls = [info.asset || UPDATE_APP_ZIP(info.latest)].concat(UPDATE_MIRROR_ZIPS(info.latest));
+  const errors = [];
+  for (const url of urls) {
+    try {
+      updateLog('try ' + url);
+      const buf = await fetchUpdateZip(url);
+      fs.writeFileSync(zip, buf);
+      updateLog('ok ' + url + ' (' + buf.length + ' bytes)');
+      return { zip, size: buf.length, from: url };
+    } catch (e) {
+      const host = String(url).replace(/^https:\/\//, '').split('/')[0];
+      errors.push(host + ': ' + String(e.message || e));
+      updateLog('fail ' + url + ' -> ' + String(e.message || e));
+    }
   }
+  throw new Error('下载失败（' + errors.join('；') + '）');
 }
 
 function writeApplyScript(zipPath) {

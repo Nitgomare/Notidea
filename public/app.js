@@ -1183,7 +1183,12 @@ $('#btn-do-update').onclick = async () => {
   note.textContent = '正在下载并安装…装好后窗口会自动刷新，请不要关掉它';
   try {
     const r = await api('/api/update/apply', { method: 'POST' });
-    if (r.error) { note.textContent = '更新失败：' + r.error; btn.disabled = false; return; }
+    if (r.error) {
+      note.innerHTML = '更新失败：' + escapeHtml(r.error) +
+        (r.url ? ' · <a href="' + escapeHtml(r.url) + '" target="_blank" rel="noreferrer">手动下载</a>' : '');
+      btn.disabled = false;
+      return;
+    }
     note.textContent = '已下载 v' + r.latest + '（' + Math.round((r.size || 0) / 1024) + ' KB），正在重启服务…';
     // 等服务重启后自己刷新
     const want = r.latest;
