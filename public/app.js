@@ -40,10 +40,23 @@ let toastTimer;
 function toast(msg) {
   const el = $('#toast');
   el.textContent = msg;
+  el.classList.remove('out');
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 2200);
+  toastTimer = setTimeout(() => {
+    el.classList.add('out');
+    toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 250);
+  }, 2200);
 }
+
+/* 动效辅助：重放一个一次性动画类 */
+function replayClass(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+let bornMemoId = null;
 
 const pad = (n) => String(n).padStart(2, '0');
 const pad2 = pad;
@@ -144,6 +157,7 @@ function renderHeatmap() {
     const n = state.heatmap[key] || 0;
     const cell = document.createElement('div');
     cell.className = 'heat-cell day';
+    cell.style.setProperty('--i', lead + d);
     if (n > 0) cell.classList.add('l' + Math.min(4, 1 + Math.floor((n / max) * 3.999)));
     if (key === todayKey) cell.classList.add('today');
     if (key > todayKey) cell.classList.add('future');
@@ -396,6 +410,11 @@ function renderList() {
     return;
   }
   let lastDay = '';
+  let idx = 0;
+  const animate = (node) => {
+    if (idx < 14) { node.classList.add('enter'); node.style.setProperty('--d', idx); }
+    idx++;
+  };
   for (const m of state.memos) {
     const k = dayKey(m.created_at);
     if (k !== lastDay) {
@@ -403,17 +422,29 @@ function renderList() {
       const sep = document.createElement('div');
       sep.className = 'day-sep';
       sep.textContent = dayLabel(m.created_at);
+      animate(sep);
       list.appendChild(sep);
     }
-    list.appendChild(memoNode(m));
+    const node = memoNode(m);
+    if (bornMemoId && m.id === bornMemoId) node.classList.add('born');
+    else animate(node);
+    list.appendChild(node);
   }
+  bornMemoId = null;
   $('#btn-more').hidden = !state.hasMore;
 }
 
 function renderStats() {
-  $('#stat-total').textContent = state.stats.total ?? 0;
-  $('#stat-today').textContent = state.stats.today ?? 0;
-  $('#stat-days').textContent = state.stats.days ?? 0;
+  const setNum = (sel, v) => {
+    const el = $(sel);
+    if (!el) return;
+    const next = String(v ?? 0);
+    if (el.textContent !== next && el.textContent !== '') replayClass(el, 'bump');
+    el.textContent = next;
+  };
+  setNum('#stat-total', state.stats.total);
+  setNum('#stat-today', state.stats.today);
+  setNum('#stat-days', state.stats.days);
   $('#memo-count').textContent = (state.stats.total ?? 0) + ' 条 · ' + (state.stats.days ?? 0) + ' 天';
 }
 
@@ -438,7 +469,8 @@ function renderReminders(nowTs) {
   for (const r of items) {
     const overdue = r.remind_at <= (nowTs || Date.now());
     const row = document.createElement('div');
-    row.className = 'reminder' + (overdue ? ' overdue' : '');
+    row.className = 'reminder enter' + (overdue ? ' overdue' : '');
+    row.style.setProperty('--d', Math.min(items.indexOf(r), 14));
     row.dataset.memo = r.memo_id;
     row.dataset.cid = r.id;
     row.innerHTML =
@@ -479,7 +511,8 @@ function renderListTitle() {
     : f.type === 'reminders' ? '提醒'
     : f.type === 'random' ? '随机漫步'
     : '全部笔记';
-  $('#list-title').textContent = title;
+  const titleEl = $('#list-title');
+  if (titleEl.textContent !== title) { titleEl.textContent = title; replayClass(titleEl, 'swap'); }
   $('#list-sub').textContent = state.search ? '搜索「' + state.search + '」' : '';
   document.querySelectorAll('.nav-item').forEach((a) => a.classList.toggle('active', !state.has && a.dataset.filter === f.type));
   document.querySelectorAll('#subnav a').forEach((a) => a.classList.toggle('active', a.dataset.has === state.has));
@@ -618,6 +651,11 @@ async function memoAction(act, card) {
   if (act === 'del') {
     if (!confirm('删除这条笔记？（本地数据库，不可恢复）')) return;
     await api('/api/memos/' + id, { method: 'DELETE' });
+    const gone = document.querySelector('.memo[data-id="' + id + '"]');
+    if (gone && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      gone.classList.add('leaving');
+      await new Promise((r) => setTimeout(r, 360));
+    }
     state.memos = state.memos.filter((m) => m.id !== id);
     renderList();
     await refreshBootstrap();
@@ -780,7 +818,9 @@ async function saveMemo() {
   applyTags({ tags, tagTree, heatmap });
   state.filter = { type: 'all' };
   state.has = '';
+  bornMemoId = memo && memo.id;
   await loadMemos();
+  replayClass($('#composer'), 'saved');
   toast('已保存到本地');
   return memo;
 }
@@ -924,7 +964,8 @@ let currentAi = { skill: null, text: '', payload: {} };
 async function runAi(skill, payload = {}) {
   if (!state.llm.hasKey) { toast('先到设置里填模型 API Key'); $('#btn-settings').click(); return; }
   const body = $('#rail-body');
-  body.innerHTML = '<p class="muted small">思考中…</p>';
+  body.classList.remove('streaming');
+  body.innerHTML = '<p class="thinking muted small">思考中<i></i><i></i><i></i></p>';
   $('#btn-ai-save').hidden = true;
   currentAi = { skill, text: '', payload };
   try {
@@ -938,6 +979,7 @@ async function runAi(skill, payload = {}) {
       throw new Error(err.error || 'HTTP ' + res.status);
     }
     body.innerHTML = '';
+    body.classList.add('streaming');
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
@@ -959,8 +1001,10 @@ async function runAi(skill, payload = {}) {
         }
       }
     }
+    body.classList.remove('streaming');
     $('#btn-ai-save').hidden = !currentAi.text;
   } catch (e) {
+    body.classList.remove('streaming');
     body.innerHTML = '<p class="muted small">生成失败：' + escapeHtml(e.message) + '</p>';
   }
 }
@@ -1719,3 +1763,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 });
+
+/* 动效：主按钮涟漪 + 卡片鼠标光斑 */
+document.addEventListener('pointerdown', (e) => {
+  const btn = e.target.closest('.primary-btn, .new-btn');
+  if (!btn || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = btn.getBoundingClientRect();
+  const size = Math.max(r.width, r.height);
+  const s = document.createElement('span');
+  s.className = 'ripple';
+  s.style.cssText = 'width:' + size + 'px;height:' + size + 'px;left:' + (e.clientX - r.left - size / 2) + 'px;top:' + (e.clientY - r.top - size / 2) + 'px';
+  btn.appendChild(s);
+  s.addEventListener('animationend', () => s.remove());
+});
+document.addEventListener('pointermove', (e) => {
+  const card = e.target.closest && e.target.closest('.memo');
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+  card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+}, { passive: true });
