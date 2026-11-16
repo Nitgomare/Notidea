@@ -1,0 +1,32 @@
+flomo local — Windows x64 便携版
+================================
+
+用法
+----
+1. 解压到任意可写目录（不要放 C:\Program Files，那里写不了 data\）
+2. 双击 start-desktop.cmd  → 独立窗口（推荐）
+   或 start.cmd             → 在浏览器里打开 http://127.0.0.1:7777
+3. 想在桌面放图标：右键 start-desktop.cmd →「发送到 → 桌面快捷方式」，
+   或运行  tools\make-shortcut.ps1  （自动找真正的桌面路径）
+
+你的数据
+--------
+全部在本目录的 data\ 里：
+  data\flomo.db   SQLite 主库（笔记、标签、AI 结果）
+  data\files\     图片 / 视频 / 语音附件
+  data\llm.json   模型配置（含 API Key，别外传）
+
+换电脑：整个文件夹拷走即可。
+升级：只替换程序文件，保留 data\ 不动。
+
+AI
+---
+左下角「设置」填自己的 OpenAI 兼容接口（Base URL / 模型 / Key），
+例如 https://api.deepseek.com/v1 + deepseek-chat。
+不填也能记笔记，只是 AI 技能会提示未配置。
+
+说明
+----
+- 服务只监听 127.0.0.1，局域网其它机器访问不到。
+- 第一次运行 Windows 可能弹 SmartScreen：点「更多信息 → 仍要运行」。
+- 桌面窗口用 Edge 的应用模式（和 WebView2 同内核）；没有 Edge 会自动退回默认浏览器。

@@ -1,0 +1,18 @@
+flomo local 更新包
+==================
+
+适用：已经装了旧版本（便携版 zip 解压出来的那种）的人。
+
+用法
+----
+1. 把这个压缩包解压到**旧版本的安装目录里面**
+   （解压后应该和 server.js、data、start-desktop.cmd 在同一层里多出一个文件夹）
+2. 打开那个文件夹，双击 update.cmd
+3. 脚本会把新程序文件覆盖过去（data\ 和 runtime\ 不动），按任意键结束
+4. 关掉旧的窗口，重新双击 start-desktop.cmd
+
+注意
+----
+- 更新不会动你的笔记：data\flomo.db、data\files\、data\llm.json 全部保留
+- 如果更新包解压到了别的地方，update.cmd 会提示"没找到 server.js"并停下，不会误覆盖
+- 想回退：把旧版本的 zip 解压出来，同样方式覆盖一次即可

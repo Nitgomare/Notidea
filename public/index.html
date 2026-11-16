@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flomo local · 本地笔记</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#1f6f4a">
+<meta name="application-name" content="flomo local">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">flomo</span><span class="brand-suffix">local</span>
+      <button class="icon-btn" id="btn-collapse" title="收起侧栏">⟨</button>
+    </div>
+
+    <section class="heat" id="heat">
+      <div class="heat-stats">
+        <div><b id="stat-total">0</b><span>笔记</span></div>
+        <div><b id="stat-tags">0</b><span>标签</span></div>
+        <div><b id="stat-days">0</b><span>天</span></div>
+      </div>
+      <div class="heat-head">
+        <button class="icon-btn" id="heat-prev" title="上个月">‹</button>
+        <span id="heat-month">—</span>
+        <button class="icon-btn" id="heat-next" title="下个月">›</button>
+      </div>
+      <div class="heat-weekdays" id="heat-weekdays"></div>
+      <div class="heat-grid month" id="heat-grid"></div>
+      <div class="heat-tip" id="heat-tip" hidden></div>
+    </section>
+
+    <button class="new-btn" id="btn-new">＋ 记一条</button>
+
+    <nav class="nav">
+      <a href="#" data-filter="all" class="nav-item active" id="nav-all">
+        <span class="nav-ico">◍</span><span>全部笔记</span><em id="nav-count-all"></em>
+        <span class="subnav-caret" id="subnav-toggle" title="展开/收起筛选">▾</span>
+      </a>
+      <div class="subnav" id="subnav">
+        <a href="#" data-has="notags"><span class="sub-ico">⊘</span>无标签</a>
+        <a href="#" data-has="images"><span class="sub-ico">▣</span>有图片</a>
+        <a href="#" data-has="videos"><span class="sub-ico">▷</span>有视频</a>
+        <a href="#" data-has="audio"><span class="sub-ico">◍</span>有语音</a>
+        <a href="#" data-has="links"><span class="sub-ico">⚯</span>有链接</a>
+      </div>
+      <a href="#" data-filter="today" class="nav-item">
+        <span class="nav-ico">◔</span><span>今日</span><em id="stat-today">0</em>
+      </a>
+      <a href="#" data-filter="pinned" class="nav-item">
+        <span class="nav-ico">✦</span><span>置顶</span>
+      </a>
+      <a href="#" data-filter="random" class="nav-item">
+        <span class="nav-ico">⁂</span><span>随机漫步</span>
+      </a>
+      <a href="#" id="nav-insight" class="nav-item">
+        <span class="nav-ico">✧</span><span>AI 洞察</span>
+      </a>
+    </nav>
+
+    <div class="side-section">
+      <div class="side-title">
+        <span>标签</span>
+        <input id="tag-search" type="search" placeholder="搜索" autocomplete="off">
+        <button class="icon-btn" id="btn-tag-sort" title="切换排序">⇅</button>
+      </div>
+      <div class="tag-list" id="tag-list"></div>
+    </div>
+
+    <div class="side-foot">
+      <button class="ghost-btn" id="btn-ai-panel">AI 面板</button>
+      <button class="ghost-btn" id="btn-settings">设置</button>
+      <button class="ghost-btn" id="btn-export">导出</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="搜索笔记…  Ctrl+K" autocomplete="off">
+        <kbd>Ctrl K</kbd>
+      </div>
+      <div class="topbar-right"><span class="muted" id="memo-count"></span></div>
+    </header>
+
+    <section class="composer" id="composer">
+      <textarea id="draft" rows="3" placeholder="此刻在想什么？支持 #标签 、[[链接]]、粘贴图片，Ctrl+Enter 保存"></textarea>
+      <div class="attach-strip" id="attach-strip" hidden></div>
+      <div class="composer-foot">
+        <span class="hint" id="draft-hint">0 字</span>
+        <div class="composer-actions">
+          <button class="ghost-btn" id="btn-attach" title="添加图片 / 视频 / 语音">＋ 附件</button>
+          <button class="ghost-btn" id="btn-tagsuggest" title="让 AI 建议标签"># 建议标签</button>
+          <button class="primary-btn" id="btn-save">保存</button>
+        </div>
+      </div>
+      <input type="file" id="file-input" multiple accept="image/*,video/*,audio/*" hidden>
+    </section>
+
+    <div class="list-head">
+      <h2 id="list-title">全部笔记</h2>
+      <span class="muted" id="list-sub"></span>
+    </div>
+    <section class="memo-list" id="memo-list"></section>
+    <div class="load-more"><button class="ghost-btn" id="btn-more" hidden>加载更多</button></div>
+    <footer class="foot muted">数据保存在本机 <code id="db-path"></code> · 只有 AI 功能会调用你配置的模型接口</footer>
+  </main>
+
+  <aside class="rail" id="rail">
+    <div class="rail-head">
+      <h3>AI</h3>
+      <button class="icon-btn" id="btn-rail-close" title="收起">✕</button>
+    </div>
+    <div class="rail-tabs" id="rail-tabs">
+      <button data-ai="daily-review" class="chip active">每日回顾</button>
+      <button data-ai="weekly-summary" class="chip">本周小结</button>
+      <button data-ai="random-walk" class="chip">随机漫步</button>
+      <button data-ai="ask" class="chip">问笔记</button>
+      <button data-ai="report-month" class="chip">月度年报</button>
+      <button data-ai="report-year" class="chip">年度年报</button>
+    </div>
+    <div class="rail-body" id="rail-body">
+      <p class="muted small">选一个技能，AI 会读取本地笔记生成内容。结果只保存在本地。</p>
+    </div>
+    <div class="rail-input" id="rail-input" hidden>
+      <input id="ask-input" placeholder="问一个只有笔记才知道答案的问题…" />
+    </div>
+    <div class="rail-foot">
+      <button class="primary-btn" id="btn-ai-run">生成</button>
+      <button class="ghost-btn" id="btn-ai-save" hidden>存为笔记</button>
+    </div>
+  </aside>
+</div>
+
+<dialog id="settings" class="dialog">
+  <form method="dialog" class="dialog-body">
+    <h3>设置</h3>
+    <label>模型接口地址（OpenAI 兼容）<input id="cfg-base" placeholder="https://api.deepseek.com/v1"></label>
+    <label>API Key<input id="cfg-key" type="password" placeholder="sk-…（只存本机 data/llm.json）"></label>
+    <label>模型名<input id="cfg-model" placeholder="deepseek-chat"></label>
+    <label>温度<input id="cfg-temp" type="number" step="0.1" min="0" max="2"></label>
+    <p class="muted small" id="cfg-note"></p>
+    <div class="update-row">
+      <span class="muted small">版本 <b id="app-version">—</b></span>
+      <button type="button" class="ghost-btn" id="btn-check-update">检查更新</button>
+    </div>
+    <p class="muted small" id="update-note"></p>
+    <div class="dialog-actions">
+      <button class="ghost-btn" value="cancel">取消</button>
+      <button class="primary-btn" id="btn-cfg-save" value="default">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="tag-edit" class="dialog">
+  <form method="dialog" class="dialog-body">
+    <h3>编辑标签</h3>
+    <label>标签名（用 / 分层，如 书/技术）<input id="te-name" autocomplete="off"></label>
+    <label>图标（一个字符，可留空）<input id="te-icon" maxlength="4" autocomplete="off"></label>
+    <label>移动到<select id="te-parent"><option value="">（顶层）</option></select></label>
+    <p class="muted small" id="te-note"></p>
+    <div class="dialog-actions">
+      <button class="ghost-btn" value="cancel">取消</button>
+      <button class="primary-btn" id="btn-te-save" value="default">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="insight" class="dialog insight-dialog">
+  <div class="dialog-body insight-body">
+    <header class="insight-head">
+      <h3>AI 洞察</h3>
+      <div class="insight-head-actions">
+        <button class="ghost-btn" id="btn-insight-history">历史洞察</button>
+        <button class="icon-btn" id="btn-insight-close" title="关闭">✕</button>
+      </div>
+    </header>
+
+    <div id="insight-picker">
+      <p class="insight-lead">选择任意视角，开始洞察</p>
+      <p class="insight-scope"><span id="insight-scope-text" class="muted small"></span> · <a href="#" id="btn-insight-scope">修改范围</a></p>
+      <div class="scope-editor" id="scope-editor" hidden>
+        <select id="scope-days">
+          <option value="0">全部笔记</option>
+          <option value="7">最近 7 天</option>
+          <option value="30">最近 30 天</option>
+          <option value="90">最近 90 天</option>
+          <option value="365">最近一年</option>
+        </select>
+        <select id="scope-tag"><option value="">不限标签</option></select>
+        <button class="ghost-btn" id="btn-scope-apply">应用</button>
+      </div>
+      <div class="insight-grid" id="insight-grid"></div>
+      <button class="insight-more" id="btn-insight-more">发现更多视角 / 自定义 ›</button>
+    </div>
+
+    <div id="insight-result" hidden>
+      <div class="insight-result-head">
+        <span>
+          <span id="insight-result-title" class="insight-result-title"></span>
+          <span id="insight-result-sub" class="muted small insight-result-sub"></span>
+        </span>
+        <button class="ghost-btn" id="btn-insight-back">← 换个视角</button>
+      </div>
+      <div class="insight-result-body" id="insight-result-body"></div>
+      <div class="insight-result-foot">
+        <button class="ghost-btn" id="btn-insight-copy">复制</button>
+        <button class="primary-btn" id="btn-insight-save" hidden>存为笔记</button>
+      </div>
+    </div>
+
+    <div id="insight-history" hidden>
+      <div class="insight-result-head">
+        <span class="insight-result-title">历史洞察</span>
+        <button class="ghost-btn" id="btn-insight-back2">← 返回</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+  </div>
+</dialog>
+
+<div class="tag-menu" id="tag-menu" hidden>
+  <button data-act="pin">置顶</button>
+  <button data-act="edit">编辑名称 / 图标</button>
+  <button data-act="move">移动到…</button>
+  <button data-act="copy">复制 #标签</button>
+  <button data-act="delete" class="danger">删除标签</button>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

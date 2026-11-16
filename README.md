@@ -1,0 +1,224 @@
+# flomo Local
+
+> 本地优先的卡片笔记桌面应用。笔记、附件、AI 结果全部存在本机 SQLite，唯一联网的地方是你自己填的大模型 API。
+>
+> 下载：[Releases](https://github.com/Nitgomare/flomo-local/releases/latest) · 源码：MIT
+
+一个**数据完全在本地**的卡片笔记应用：界面和交互照着 flomo 桌面端做，笔记、图片、标签、AI 结果全部存进本机；唯一需要联网的地方是你自己填的大模型 API。
+
+- 零第三方依赖，只用 Node 内置模块（`node:sqlite` / `node:http` / `fetch`），Node 22+ 即可。
+- 服务只监听 `127.0.0.1`，局域网其它机器访问不到。
+- 所有 AI 功能都是 `prompts/*.md` 里的提示词模板，改文件就改行为，不需要动代码。
+- 项目位置：`E:\flomolocal`（数据在 `E:\flomolocal\data`）。
+
+---
+
+## 两种启动方式
+
+**网页版**：双击 `start.cmd`（自动开浏览器），或
+
+```bash
+node server.js          # 默认 http://127.0.0.1:7777
+PORT=8080 node server.js
+```
+
+**桌面版（独立窗口，像 flomo 那样）**：双击 `start-desktop.cmd`，或桌面上的 **flomo local** 快捷方式。
+
+它用 Edge 的应用窗口模式（`--app`，和 WebView2 同一个内核）打开界面：没有地址栏、没有标签页，是一个 1220×860 的独立窗口，自己会拉起本地服务。**不再内置 Electron 运行时**，整个项目从 333MB 降到 2.6MB；如果 Edge 不存在，退回浏览器打开。
+
+桌面快捷方式由 `tools/make-shortcut.ps1` 生成：它会去注册表读**真实的桌面路径**（有的机器把「桌面」重定向到 D 盘），再在那里建 `flomo local.lnk`，旧位置残留的会一并删掉。桌面被搬走后重跑一次即可。
+
+首次打开点左下角「设置」，填三样：
+
+| 项 | 示例 |
+| --- | --- |
+| Base URL | `https://api.deepseek.com/v1` |
+| 模型 | `deepseek-chat`（或任何 OpenAI 兼容端点） |
+| API Key | `sk-...` |
+
+Key 只写进本机 `data/llm.json`，页面上永远只显示掩码。不填也能用——笔记功能完全不受影响，只有 AI 技能会提示"尚未配置"。
+
+## 目录结构
+
+```text
+flomolocal/
+├─ server.js              零依赖 HTTP：静态页 + REST API + AI 流式代理 + 附件上传
+├─ db.js                  SQLite 存储（memos / tags / memo_tags / files / ai_notes + FTS5）
+├─ llm.js                 OpenAI 兼容流式客户端 + 提示词加载 + 配置读写
+├─ prompts/               技能提示词，可直接编辑
+│   ├─ insights/          洞察「视角」，一个文件一张卡片（内置 28 个）
+│   ├─ daily-review.md    每日回顾
+│   ├─ weekly-summary.md  本周小结
+│   ├─ random-walk.md     随机漫步
+│   ├─ tag-suggest.md     标签建议
+│   └─ ask.md             问笔记
+├─ public/                index.html / style.css / app.js（无框架，原生 DOM）
+├─ assets/                图标（icon.png / flomo-local.ico，由 tools/make-icon.py 生成）
+├─ desktop/               桌面壳（WebView2 / Edge --app）
+│   ├─ launcher.js        检查/拉起服务，再用独立窗口打开
+│   └─ open.vbs           无黑框启动（桌面快捷方式指向它）
+├─ tools/import-flomo.js  可选：把 flomo 云端历史笔记导进来
+├─ tools/make-shortcut.ps1 在真实桌面位置建快捷方式（会读注册表）
+├─ tools/make-icon.py     生成 assets/ 下的图标
+├─ lib/flomo-api.js       可选：flomo 官方 API 客户端（仅导入用）
+├─ data/                  ← 你的一切数据都在这里
+│   ├─ flomo.db           SQLite 主库
+│   ├─ files/             附件（图片 / 视频 / 语音）
+│   └─ llm.json           模型配置（含 Key，勿外传）
+├─ start.cmd
+└─ start-desktop.cmd
+```
+
+## 功能
+
+### 写与看
+
+- 顶部输入框，`Ctrl + Enter` 保存；支持 `#标签`、`[[双向链接]]`、`**粗体**`、`` `代码` ``、URL 自动成链。
+- **附件**：点「＋ 附件」或直接把图片/视频/语音拖进输入框（也可以粘贴截图）。单文件上限 40MB，存在 `data/files/`，卡片里直接看大图。
+- 按天分组的时间流；置顶排最前；「今日」只看今天；「随机漫步」随机 8 条。
+- `Ctrl + K` 搜索，FTS5 全文检索，命中高亮。
+
+### 侧栏：热力图 + 抽屉筛选
+
+- 顶部是**月历热力图**：按当前月份铺成 7 列日历，每格显示日期，按当天笔记数四级着色，今天有描边。
+- ‹ › 翻月；**鼠标悬停某天会放大并弹出气泡**（`2 条笔记 · 11 月 16 日`）；**点一下直接跳到那天的笔记**。
+- 「全部笔记」下面的筛选抽屉（**无标签 / 有图片 / 有视频 / 有语音 / 有链接**）可下拉展开、也可收起，状态会记住。
+
+### 标签：树、置顶、改名、移动、删除
+
+- 标签按 `/` 分层显示成树（`新人指南 / 更多资料`），可折叠；支持搜索、按数量或名称排序。
+- 每个标签悬停出现 `⋯` 菜单：
+  - **置顶**（置顶标签排在树的最前）
+  - **编辑名称 / 图标**（图标是一个字符，如 `★`、`📚`）
+  - **移动到…**（选一个父标签，整个分支连同子标签一起搬过去）
+  - **复制 #标签**
+  - **删除标签**（会同时把正文里的 `#标签` 去掉，笔记本身保留）
+- 改名不是只改索引：**所有笔记正文里的 `#旧名` 会一起重写成 `#新名`**，子标签同步改前缀。
+
+### 双向链接
+
+- 在任意笔记里写 `[[另一条笔记的 slug]]`（卡片上点 `⧉` 可复制当前笔记的引用），渲染成可点的链接块，点击直接跳到那条笔记。
+- 也支持 `[[#123]]`（按 id）和 `[[正文开头几个字]]`（按内容匹配）。
+- 被引用时，卡片右下角出现 `↩ n`。
+
+### 相关笔记（本地计算，不调用模型）
+
+- 卡片右侧 `◎` 展开「相关笔记」：在本地用中文二元组 + TF-IDF 余弦算相似度，列出最接近的 5 条和摘要。
+- 点任意一条：已经在当前列表里就直接滚过去并高亮；不在就跳到它所在的那天。
+- 全部在内存里算，不发网络请求，也不需要向量数据库。
+
+### 月报 / 年报
+
+右栏新增两个技能：**月度年报**、**年度年报**。分别取当月 / 当年的全部笔记，按固定骨架生成：
+
+- 月报：这个月在推进什么 / 反复出现的东西 / 变化的地方 / 下个月只做一件事
+- 年报：发生了什么 / 贯穿全年的主题 / 被写得最多的东西 / 证据不够的地方 / 明年只保留一个习惯
+
+提示词在 `prompts/report-month.md`、`prompts/report-year.md`，可以自己改。
+
+### AI（右栏，流式输出，可「存为笔记」）
+
+- **每日回顾**：把今天的笔记串成一条线，指出反复出现的主题，留一个问题到明天。
+- **本周小结**：三个主题、哪个在推进、下周只做一件。
+- **随机漫步**：抽多条不同时间的笔记，找不明显的联系（允许说"没有真正联系"）。
+- **问笔记**：先本地检索，再只依据片段回答，找不到就说没有记录。
+- **建议标签**：按你已有的标签习惯补 1–3 个标签到草稿里，可删可改。
+
+### AI 洞察（侧栏 → AI 洞察）
+
+选一个「视角」，一次读一批笔记（全部 / 最近 N 天 / 某个标签）给出整体洞察。内置 **28 个视角**，按四类分组：
+
+| 分类 | 视角 |
+| --- | --- |
+| 复盘整理 | 默认洞察、每日肯定、行动指南、灵魂拷问、主题延伸、资源挖掘、每周复盘、反直觉洞见 |
+| 自我觉察 | 友情有迹、能量地图、意义雷达、关键人物、心底之问、ACT 疗法、盲区探索、朋友视角、导演视角、CBT 疗法、MBTI 分析 |
+| 思维决策 | 探索复利飞轮、主要矛盾、价值澄清、逆向思考、二阶思考 |
+| 大师视角 | 查理·芒格、亚里士多德、塞涅卡、塔莎·尤里奇 |
+
+每个视角就是 `prompts/insights/<id>.md` 一个文件，头部写 `name / author / category / range / days / icon / description / system`，正文里可用 `{{memos}} {{count}} {{tags}} {{range}}`。**加一个文件就多一张卡片**，不改代码。
+
+结果流式输出、可复制、可存为笔记，也会自动进入「历史洞察」（`ai_notes` 表，只在本机）。
+
+## 快捷键
+
+| 键 | 作用 |
+| --- | --- |
+| `Ctrl + Shift + N` | 新建（等价于点「＋ 记一条」，光标直接进输入框） |
+| `Ctrl + K` | 搜索 |
+| `Alt + Shift + A` | 唤起右栏 AI |
+| `Ctrl + Enter` | 保存笔记 / 结束编辑 |
+| `Esc` | 先关弹窗，再清空搜索 / 取消编辑 |
+
+（和 flomo 桌面端一致；窗口图标来自 `assets/flomo-local.ico`，页面 favicon 是同一张。）
+
+## 打包分发（给别人用）
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-release.ps1
+# 产物：distlomo-local-1.0.0-win-x64.zip（约 33MB，内置 Node 运行时）
+```
+
+- 默认把 `node.exe` 一起打进去，对方**不用装 Node**，解压双击 `start-desktop.cmd` 即可。
+- `-NoNode` 出一个 300KB 左右的瘦包，前提是对方自己装了 Node 22+。
+- `data/` 永远不打包，你的笔记、Key、附件不会跟着发出去。
+- 包里有 `使用说明.txt`（启动方式、数据在哪、AI 怎么配）。
+- 升级：把新包解压覆盖旧的程序文件，保留 `data/` 目录即可。
+
+注意：exe 没有代码签名，Windows SmartScreen 可能提示"未知发布者"，点「更多信息 → 仍要运行」；要发很多人时建议用 Inno Setup 做成安装包，或自行签名。
+
+## 发出去之后怎么更新
+
+已经拿到 zip 的人有两种更新方式：
+
+**A. 增量更新包（推荐，150KB）**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-patch.ps1 -From 1.0.0 -To 1.1.0
+# 产物：distlomo-local-1.0.0-to-1.1.0-patch.zip
+```
+
+对方：解压到自己的安装目录里 → 双击里面的 `update.cmd` → 关掉旧窗口、重新打开。脚本用 robocopy 覆盖程序文件，**`data\` 和 `runtime\` 不动**，解压错地方会检测不到 `server.js` 并停下，不会误覆盖。
+
+**B. 整包替换**
+
+直接解压新版 zip，把里面的文件覆盖过去；因为包里没有 `data\`，笔记不会被覆盖。
+
+**版本号**只在一个地方改：`version.js`。`server.js` 会把它通过 `/api/version` 和 `/api/bootstrap` 的 `app.version` 暴露出来，界面上也能核对。
+
+## 从 flomo 迁移历史笔记（可选）
+
+```bash
+node tools/import-flomo.js --dry     # 先看会导入多少条
+node tools/import-flomo.js           # 真导入（按 slug 去重，可重复跑）
+node tools/import-flomo.js --since=2026-01-01
+```
+
+token 自动从 `%APPDATA%\flomo卡片笔记\config.json` 读（已登录的 flomo 桌面端），也可 `--token=` 指定。只读你的账号，不写远端。
+
+## 数据与隐私
+
+- 笔记在 `data/flomo.db`，附件在 `data/files/`；AI 只发送**你要分析的那些笔记正文**给你配置的端点，没有别的出站请求（无统计、无遥测、无 CDN）。
+- 备份：复制 `data/` 目录即可；或页面点「导出」下载整库 JSON。
+- 想清空：删掉 `data/`，重启服务会重建空库。
+
+## 自测
+
+```bash
+node tools/selftest.js   # 附件上传/访问、筛选、双向链接、标签改名与置顶、热力图
+```
+
+## 接口速查（给二次开发）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/bootstrap` | 统计、标签树、热力图、提示词列表、模型配置（掩码） |
+| GET/POST | `/api/memos` | 列表（`tag/search/has/since/until/pinned/random`）、新建（可带 `files`） |
+| PUT/DELETE | `/api/memos/:id` | 改正文或置顶、删除 |
+| POST | `/api/memos/:id/files` | 追加附件 |
+| GET | `/api/memos/:id/links` | 反链与被引用的笔记 |
+| GET | `/api/tags/tree` | 标签树 |
+| POST | `/api/tags/{create,rename,meta,delete}` | 标签增改删（rename 会重写正文） |
+| GET | `/api/heatmap?days=154` | 热力图数据 |
+| POST | `/api/ai/:skill` | SSE 流式生成（`daily-review` / `weekly-summary` / `random-walk` / `ask` / `tag-suggest` / `insight`） |
+| GET | `/api/insights` | 视角列表 + 当前范围统计 |
+| GET | `/api/insights/history` | 历史洞察 |

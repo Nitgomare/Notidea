@@ -1,0 +1,12 @@
+# 你的数据与构建产物，永远不进仓库
+data/
+dist/
+*.log
+node_modules/
+.DS_Store
+Thumbs.db
+.stage-*/
+.patch-*/
+
+# 本地临时文件
+*.tmp
