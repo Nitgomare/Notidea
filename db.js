@@ -56,6 +56,14 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS memo_comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    memo_id    INTEGER NOT NULL REFERENCES memos(id) ON DELETE CASCADE,
+    content    TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_comments_memo ON memo_comments(memo_id);
   CREATE INDEX IF NOT EXISTS idx_files_memo ON files(memo_id);
   CREATE INDEX IF NOT EXISTS idx_files_mime ON files(mime);
 `);
@@ -143,7 +151,23 @@ function tagsOf(memoId) {
 }
 
 function hydrate(rows) {
-  return rows.map((m) => ({ ...m, tags: tagsOf(m.id), files: filesOf(m.id) }));
+  return rows.map((m) => ({ ...m, tags: tagsOf(m.id), files: filesOf(m.id), comments: commentCount(m.id) }));
+}
+
+/* ---------------- 批注 ---------------- */
+function commentsOf(memoId) {
+  return db.prepare('SELECT id, memo_id, content, created_at FROM memo_comments WHERE memo_id = ? ORDER BY id ASC').all(memoId);
+}
+function commentCount(memoId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM memo_comments WHERE memo_id = ?').get(memoId).n;
+}
+function addComment(memoId, content) {
+  const info = db.prepare('INSERT INTO memo_comments(memo_id, content, created_at) VALUES (?, ?, ?)')
+    .run(memoId, String(content || ''), now());
+  return db.prepare('SELECT id, memo_id, content, created_at FROM memo_comments WHERE id = ?').get(Number(info.lastInsertRowid));
+}
+function deleteComment(id) {
+  return db.prepare('DELETE FROM memo_comments WHERE id = ?').run(id).changes > 0;
 }
 
 /* ---------------- 附件 ---------------- */
@@ -340,7 +364,7 @@ function countMemos() {
 
 function getMemo(id) {
   const row = db.prepare(`${selectBase} WHERE id = ?`).get(id);
-  return row ? { ...row, tags: tagsOf(row.id), files: filesOf(row.id) } : null;
+  return row ? { ...row, tags: tagsOf(row.id), files: filesOf(row.id), comments: commentsOf(row.id) } : null;
 }
 
 function createMemo(content, { createdAt, source = 'local', pinned = 0 } = {}) {
@@ -586,4 +610,5 @@ module.exports = {
   exportAll, importAll, stats, extractTags, syncTags, importMemo,
   filesOf, addFile, attachFiles, parseLinkTargets, resolveLinkTarget, backlinksOf, forwardLinksOf, heatmap,
   relatedMemos, tokensOf,
+  commentsOf, commentCount, addComment, deleteComment,
 };

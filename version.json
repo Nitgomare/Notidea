@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "notes": "首个公开版本：本地优先卡片笔记，AI 洞察 28 视角、月历热力图、双链、附件",
+  "version": "1.2.0",
+  "notes": "每条笔记的菜单（分享/编辑/复制/新窗口/浮窗/AI 洞察/相关笔记/复制链接/批注/更多），批注功能",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }

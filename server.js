@@ -397,6 +397,23 @@ async function route(req, res) {
       } catch (e) { return json(res, 400, { error: e.message }); }
     }
 
+    if (p.startsWith('/api/memos/') && p.endsWith('/comments')) {
+      const id = Number(p.slice('/api/memos/'.length, -'/comments'.length));
+      if (!dbm.getMemo(id)) return json(res, 404, { error: '笔记不存在' });
+      if (req.method === 'GET') return json(res, 200, { comments: dbm.commentsOf(id) });
+      if (req.method === 'POST') {
+        const body = await readBody(req);
+        const content = String(body.content || '').trim();
+        if (!content) return json(res, 400, { error: '批注不能为空' });
+        return json(res, 200, { comment: dbm.addComment(id, content), memo: dbm.getMemo(id) });
+      }
+    }
+
+    if (p.startsWith('/api/comments/') && req.method === 'DELETE') {
+      const id = Number(p.slice('/api/comments/'.length));
+      return json(res, 200, { deleted: dbm.deleteComment(id) });
+    }
+
     if (p === '/api/export' && req.method === 'GET') {
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',

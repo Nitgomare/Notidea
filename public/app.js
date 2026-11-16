@@ -358,20 +358,29 @@ function memoNode(m) {
   const el = document.createElement('article');
   el.className = 'memo' + (m.pinned ? ' pinned' : '');
   el.dataset.id = m.id;
+  const words = (m.content || '').replace(/\s+/g, '').length;
+  const backCount = Array.isArray(m.backlinks) ? m.backlinks.length : Number(m.backlinks || 0);
+  const commentCount = Array.isArray(m.comments) ? m.comments.length : Number(m.comments || 0);
+  const isEdited = m.updated_at && m.updated_at - m.created_at > 60000;
   el.innerHTML =
     '<div class="memo-body">' + renderContent(m.content, state.search) + '</div>' +
     (m.files && m.files.length ? '<div class="att-grid">' + m.files.map(fileBlock).join('') + '</div>' : '') +
+    '<div class="comment-box" hidden>' +
+      '<div class="comment-list"></div>' +
+      '<div class="comment-input">' +
+        '<input type="text" placeholder="写一句批注…（回车发送）" maxlength="2000">' +
+        '<button class="mini-btn" data-act="comment-send">发送</button>' +
+      '</div>' +
+    '</div>' +
     '<div class="memo-foot">' +
       '<span class="memo-time" title="' + new Date(m.created_at).toLocaleString() + '">' + fmtTime(m.created_at) + '</span>' +
       '<span class="memo-tags muted small">' + (m.tags || []).map((t) => '#' + t).join(' ') + '</span>' +
-      (m.backlinks ? '<span class="memo-back" title="有几条笔记引用了它">↩ ' + m.backlinks + '</span>' : '') +
+      (commentCount ? '<button class="memo-comment-count" data-act="comment-toggle" title="批注">✎ ' + commentCount + '</button>' : '') +
+      (backCount ? '<span class="memo-back" title="有几条笔记引用了它">↩ ' + backCount + '</span>' : '') +
+      '<span class="memo-words muted small">' + words + ' 字' + (isEdited ? ' · 编辑于 ' + fmtTime(m.updated_at) : '') + '</span>' +
       '<div class="memo-actions">' +
-        '<button data-act="related" title="相关笔记">◎</button>' +
-        '<button data-act="quote" title="复制引用（[[链接]]）">⧉</button>' +
-        '<button data-act="insight" title="AI 洞察">✧</button>' +
-        '<button data-act="pin" title="' + (m.pinned ? '取消置顶' : '置顶') + '">' + (m.pinned ? '★' : '☆') + '</button>' +
-        '<button data-act="edit" title="编辑">✎</button>' +
-        '<button data-act="del" title="删除">🗑</button>' +
+        '<button class="memo-ai" data-act="insight" title="用 AI 看这条笔记">✧ AI 洞察</button>' +
+        '<button class="memo-dot" data-act="menu" title="更多">⋯</button>' +
       '</div>' +
     '</div>' +
     '<div class="related-box" hidden></div>';
@@ -512,9 +521,16 @@ $('#memo-list').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button[data-act]');
   if (!btn) return;
   const card = btn.closest('.memo');
+  const act = btn.dataset.act;
+  if (act === 'menu') { openMemoMenu(card, btn); return; }
+  if (act === 'comment-toggle') { toggleCommentBox(card); return; }
+  memoAction(act, card);
+});
+
+async function memoAction(act, card) {
   const id = Number(card.dataset.id);
   const memo = state.memos.find((m) => m.id === id);
-  const act = btn.dataset.act;
+  if (!memo) return;
 
   if (act === 'related') {
     const box = card.querySelector('.related-box');
@@ -581,8 +597,70 @@ $('#memo-list').addEventListener('click', async (ev) => {
 
   if (act === 'insight') {
     openInsight();
-    runInsight({ id: 'default', name: '单条洞察', category: '复盘整理', days: 0, range: '这条笔记', single: true });
+    runInsight({ id: 'default', name: '单条洞察', category: '复盘整理', days: 0, range: '这条笔记', single: true, memoId: id });
     return;
+  }
+
+  if (act === 'copy') {
+    await copyText(memo.content);
+    toast('已复制内容');
+    return;
+  }
+
+  if (act === 'share') {
+    const text = memo.content + '\n\n' + new Date(memo.created_at).toLocaleString();
+    if (navigator.share) {
+      try { await navigator.share({ title: '一条笔记', text }); return; } catch (e) { /* 用户取消，回落到复制 */ }
+    }
+    await copyText(text);
+    toast('分享文本已复制');
+    return;
+  }
+
+  if (act === 'copy-link') {
+    await copyText(location.origin + '/?memo=' + id);
+    toast('链接已复制');
+    return;
+  }
+
+  if (act === 'open-window') {
+    window.open('/?memo=' + id, 'memo-' + id, 'width=760,height=720');
+    return;
+  }
+
+  if (act === 'float') {
+    window.open('/?memo=' + id + '&float=1', 'float-' + id, 'width=400,height=560,menubar=no,toolbar=no,location=no,status=no');
+    return;
+  }
+
+  if (act === 'export-md') {
+    const md = (memo.tags || []).map((t) => '#' + t).join(' ') + '\n\n' + memo.content + '\n';
+    downloadFile('memo-' + memo.slug + '.md', md, 'text/markdown');
+    return;
+  }
+
+  if (act === 'copy-json') {
+    await copyText(JSON.stringify(memo, null, 2));
+    toast('JSON 已复制');
+    return;
+  }
+
+  if (act === 'comment') {
+    toggleCommentBox(card, true);
+    return;
+  }
+
+  if (act === 'comment-send') {
+    await sendComment(card);
+    return;
+  }
+}
+
+/* 批注输入框回车发送 */
+document.getElementById('memo-list').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('.comment-input input')) {
+    e.preventDefault();
+    sendComment(e.target.closest('.memo'));
   }
 });
 
@@ -1122,7 +1200,210 @@ $('#btn-insight-more').onclick = () => {
 (async function boot() {
   await refreshBootstrap();
   await loadMemos();
+  await openFromQuery();
   updateHint();
   if (!state.stats.total) draft.focus();
   if (window.innerWidth < 1180) closeRail();
 })();
+
+/* ---------------- 笔记菜单（⋯） ---------------- */
+let menuCard = null;
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+}
+
+function downloadFile(name, text, mime) {
+  const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function ensureMemoMenu() {
+  let el = document.getElementById('memo-menu');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'memo-menu';
+  el.className = 'memo-menu';
+  el.hidden = true;
+  el.innerHTML =
+    '<button data-menu="share">分享</button>' +
+    '<button data-menu="edit">编辑</button>' +
+    '<button data-menu="copy">复制</button>' +
+    '<div class="menu-sep"></div>' +
+    '<button data-menu="open-window">新窗口打开</button>' +
+    '<button data-menu="pin">置顶</button>' +
+    '<button data-menu="float">加入浮窗</button>' +
+    '<button data-menu="insight">AI 洞察</button>' +
+    '<button data-menu="related">相关笔记</button>' +
+    '<button data-menu="copy-link">复制链接</button>' +
+    '<button data-menu="comment">批注</button>' +
+    '<button data-menu="more" class="menu-more">更多<span class="chev">›</span></button>' +
+    '<div class="menu-sub" hidden>' +
+      '<button data-menu="quote">复制引用 [[链接]]</button>' +
+      '<button data-menu="export-md">导出 Markdown</button>' +
+      '<button data-menu="copy-json">复制 JSON</button>' +
+    '</div>' +
+    '<div class="menu-sep"></div>' +
+    '<button data-menu="del" class="danger">删除</button>' +
+    '<div class="menu-foot" id="memo-menu-foot"></div>';
+
+  el.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-menu]');
+    if (!b) return;
+    const act = b.dataset.menu;
+    if (act === 'more') {
+      const sub = el.querySelector('.menu-sub');
+      sub.hidden = !sub.hidden;
+      return;
+    }
+    hideMemoMenu();
+    if (menuCard) memoAction(act, menuCard);
+  });
+
+  document.body.appendChild(el);
+  document.addEventListener('click', (ev) => {
+    if (el.hidden) return;
+    if (ev.target.closest('#memo-menu') || ev.target.closest('[data-act="menu"]')) return;
+    hideMemoMenu();
+  }, true);
+  window.addEventListener('resize', hideMemoMenu);
+  document.addEventListener('scroll', (ev) => {
+    if (el.hidden) return;
+    if (ev.target && ev.target.closest && ev.target.closest('#memo-menu')) return;
+    hideMemoMenu();
+  }, true);
+  return el;
+}
+
+function openMemoMenu(card, btn) {
+  const menu = ensureMemoMenu();
+  menuCard = card;
+  const memo = state.memos.find((m) => m.id === Number(card.dataset.id));
+  if (!memo) return;
+  menu.querySelector('[data-menu="pin"]').textContent = memo.pinned ? '取消置顶' : '置顶';
+  menu.querySelector('[data-menu="comment"]').textContent = memo.comments ? '批注（' + memo.comments + '）' : '批注';
+  const words = (memo.content || '').replace(/\s+/g, '').length;
+  const edited = memo.updated_at && memo.updated_at - memo.created_at > 60000;
+  menu.querySelector('.menu-sub').hidden = true;
+  document.getElementById('memo-menu-foot').textContent = words + ' 字 · ' + (edited ? '编辑于 ' : '写于 ') + fmtTime(edited ? memo.updated_at : memo.created_at);
+  menu.hidden = false;
+
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth || 200;
+  const mh = menu.offsetHeight || 320;
+  let left = Math.min(r.right - mw, window.innerWidth - mw - 12);
+  if (left < 12) left = 12;
+  let top = r.bottom + 6;
+  if (top + mh > window.innerHeight - 12) top = Math.max(12, r.top - mh - 6);
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  menu.focus();
+}
+
+function hideMemoMenu() {
+  const el = document.getElementById('memo-menu');
+  if (el) el.hidden = true;
+}
+
+/* ---------------- 批注 ---------------- */
+async function toggleCommentBox(card, forceOpen) {
+  const box = card.querySelector('.comment-box');
+  if (!box) return;
+  if (!forceOpen && !box.hidden) { box.hidden = true; return; }
+  box.hidden = false;
+  await loadComments(card);
+  const input = box.querySelector('input');
+  if (input) input.focus();
+}
+
+async function loadComments(card) {
+  const id = Number(card.dataset.id);
+  const box = card.querySelector('.comment-box');
+  const list = box.querySelector('.comment-list');
+  try {
+    const { comments } = await api('/api/memos/' + id + '/comments');
+    renderComments(list, comments);
+  } catch (e) {
+    list.innerHTML = '<span class="muted small">' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+function renderComments(list, comments) {
+  if (!comments.length) { list.innerHTML = '<span class="muted small">还没有批注</span>'; return; }
+  list.innerHTML = comments.map((c) =>
+    '<div class="comment-item" data-cid="' + c.id + '">' +
+      '<span class="comment-text">' + escapeHtml(c.content) + '</span>' +
+      '<span class="comment-time muted small">' + fmtTime(c.created_at) + '</span>' +
+      '<button class="comment-del" title="删除批注">✕</button>' +
+    '</div>'
+  ).join('');
+  list.querySelectorAll('.comment-del').forEach((b) => {
+    b.onclick = async (ev) => {
+      const item = ev.target.closest('.comment-item');
+      await api('/api/comments/' + item.dataset.cid, { method: 'DELETE' });
+      await loadComments(list.closest('.memo'));
+      await refreshBootstrap();
+    };
+  });
+}
+
+async function sendComment(card) {
+  const id = Number(card.dataset.id);
+  const box = card.querySelector('.comment-box');
+  const input = box.querySelector('input');
+  const text = input.value.trim();
+  if (!text) return;
+  const { comment, memo } = await api('/api/memos/' + id + '/comments', { method: 'POST', body: { content: text } });
+  input.value = '';
+  if (memo) {
+    const cur = state.memos.find((m) => m.id === id);
+    if (cur) cur.comments = memo.comments;
+  }
+  await loadComments(card);
+  toast('批注已保存');
+}
+
+/* ---------------- 单条笔记模式（?memo=id / ?memo=id&float=1） ---------------- */
+async function openFromQuery() {
+  const q = new URLSearchParams(location.search);
+  const id = Number(q.get('memo') || 0);
+  if (!id) return;
+  document.body.classList.add('single-mode');
+  if (q.get('float') === '1') document.body.classList.add('float-mode');
+  try {
+    const { memo } = await api('/api/memos/' + id);
+    if (memo) {
+      try {
+        const links = await api('/api/memos/' + id + '/links');
+        memo.backlinks = (links.backlinks || []).length;
+      } catch (e) { /* 忽略 */ }
+    }
+    if (!memo) { toast('笔记不存在'); document.body.classList.remove('single-mode', 'float-mode'); return; }
+    state.memos = [memo];
+    renderList();
+    $('#list-title').textContent = '单条笔记';
+    const back = document.createElement('a');
+    back.href = '/';
+    back.className = 'single-back';
+    back.textContent = '← 回到全部笔记';
+    document.querySelector('.topbar').prepend(back);
+    document.title = '一条笔记 · flomo local';
+  } catch (e) {
+    toast('打开失败：' + e.message);
+  }
+}

@@ -468,3 +468,79 @@ mark { background: #f6e3a8; color: inherit; padding: 0 1px; border-radius: 3px; 
 
 .update-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
 .update-row .ghost-btn { padding: 5px 12px; }
+
+/* ---------------- 笔记菜单 / 批注 / 单条模式 ---------------- */
+.memo-actions { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 0.12s ease; margin-left: auto; }
+.memo:hover .memo-actions { opacity: 1; }
+.memo-ai {
+  border: 0; background: transparent; color: var(--accent); font-size: 12.5px;
+  padding: 2px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.memo-ai:hover { background: rgba(31, 111, 74, 0.08); }
+.memo-dot {
+  border: 0; background: transparent; color: var(--muted); font-size: 16px;
+  line-height: 1; width: 26px; height: 24px; border-radius: 6px; cursor: pointer;
+}
+.memo-dot:hover { background: var(--paper-2); color: var(--ink); }
+.memo-comment-count {
+  border: 0; background: transparent; color: var(--muted); font-size: 12px;
+  cursor: pointer; padding: 0 2px;
+}
+.memo-comment-count:hover { color: var(--accent); }
+.memo-words { white-space: nowrap; }
+
+.memo-menu {
+  position: fixed; z-index: 120; min-width: 186px; padding: 6px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(35, 32, 28, 0.16);
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 13.5px; outline: none;
+}
+.memo-menu button {
+  border: 0; background: transparent; text-align: left; padding: 7px 10px;
+  border-radius: 8px; cursor: pointer; color: var(--ink); font-size: 13.5px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.memo-menu button:hover { background: var(--paper-2); }
+.memo-menu button.danger { color: #b4453a; }
+.menu-sep { height: 1px; background: var(--line); margin: 5px 4px; }
+.menu-foot {
+  padding: 6px 10px 2px; color: var(--muted); font-size: 11.5px;
+  border-top: 1px solid var(--line); margin-top: 4px;
+}
+.menu-sub { display: flex; flex-direction: column; gap: 2px; padding-left: 10px; border-left: 2px solid var(--line); margin: 2px 0 2px 10px; }
+
+.comment-box {
+  margin: 6px 0 2px; padding: 8px 10px; background: var(--paper-2);
+  border-radius: 10px; display: flex; flex-direction: column; gap: 6px;
+}
+.comment-list { display: flex; flex-direction: column; gap: 4px; }
+.comment-item { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.comment-text { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+.comment-del { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; opacity: 0; }
+.comment-item:hover .comment-del { opacity: 1; }
+.comment-input { display: flex; gap: 6px; }
+.comment-input input {
+  flex: 1 1 auto; padding: 6px 9px; border: 1px solid var(--line);
+  border-radius: 8px; font-size: 13px; background: #fff;
+}
+.mini-btn {
+  border: 1px solid var(--line); background: #fff; border-radius: 8px;
+  padding: 5px 11px; font-size: 12.5px; cursor: pointer; color: var(--ink);
+}
+.mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 单条笔记 / 浮窗 */
+body.single-mode .sidebar,
+body.single-mode .rail,
+body.single-mode .composer,
+body.single-mode .search-wrap { display: none !important; }
+body.single-mode .app { grid-template-columns: minmax(0, 1fr); }
+body.single-mode .main { max-width: 680px; padding: 26px 22px 48px; }
+body.single-mode .day-sep { margin-top: 6px; }
+.single-back { color: var(--muted); font-size: 13px; text-decoration: none; }
+.single-back:hover { color: var(--accent); }
+body.float-mode { background: #efe9df; }
+body.float-mode .main { max-width: 100%; padding: 14px 14px 20px; }
+body.float-mode .memo { box-shadow: 0 6px 22px rgba(35, 32, 28, 0.10); }
+body.float-mode #list-title { font-size: 15px; }
