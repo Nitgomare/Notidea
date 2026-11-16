@@ -349,7 +349,7 @@ function relatedMemos(memoId, limit = 6) {
 
 const selectBase = `SELECT id, slug, content, created_at, updated_at, pinned, source FROM memos`;
 
-function listMemos({ tag = '', search = '', pin, since, until, random = false, has = '', limit = 50, offset = 0 } = {}) {
+function listMemos({ tag = '', excludeTag = '', search = '', pin, since, until, random = false, has = '', source = '', order = '', onThisDay = false, limit = 50, offset = 0 } = {}) {
   const where = [];
   const args = [];
   if (pin !== undefined && pin !== null) {
@@ -368,16 +368,36 @@ function listMemos({ tag = '', search = '', pin, since, until, random = false, h
     where.push(`id IN (SELECT mt.memo_id FROM memo_tags mt JOIN tags t ON t.id = mt.tag_id WHERE t.name = ?)`);
     args.push(tag);
   }
-  if (has === 'notags') {
-    where.push('id NOT IN (SELECT memo_id FROM memo_tags)');
-  } else if (has === 'images' || has === 'videos' || has === 'audio') {
-    const prefix = has === 'images' ? 'image/' : has === 'videos' ? 'video/' : 'audio/';
-    where.push('id IN (SELECT memo_id FROM files WHERE memo_id IS NOT NULL AND mime LIKE ?)');
-    args.push(prefix + '%');
-  } else if (has === 'files') {
-    where.push('id IN (SELECT memo_id FROM files WHERE memo_id IS NOT NULL)');
-  } else if (has === 'links') {
-    where.push(`(content LIKE '%http://%' OR content LIKE '%https://%' OR content LIKE '%[[]%')`);
+  if (excludeTag) {
+    where.push(`id NOT IN (SELECT mt.memo_id FROM memo_tags mt JOIN tags t ON t.id = mt.tag_id WHERE t.name = ? OR t.name LIKE ?)`);
+    args.push(excludeTag, excludeTag + '/%');
+  }
+  // has 支持逗号分隔的多个条件，彼此为“且”
+  for (const h of String(has || '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (h === 'notags') {
+      where.push('id NOT IN (SELECT memo_id FROM memo_tags)');
+    } else if (h === 'images' || h === 'videos' || h === 'audio') {
+      const prefix = h === 'images' ? 'image/' : h === 'videos' ? 'video/' : 'audio/';
+      where.push('id IN (SELECT memo_id FROM files WHERE memo_id IS NOT NULL AND mime LIKE ?)');
+      args.push(prefix + '%');
+    } else if (h === 'files') {
+      where.push('id IN (SELECT memo_id FROM files WHERE memo_id IS NOT NULL)');
+    } else if (h === 'links') {
+      where.push(`(content LIKE '%http://%' OR content LIKE '%https://%' OR content LIKE '%[[]%')`);
+    }
+  }
+  if (source === 'ai') {
+    where.push(`(source = 'ai' OR content LIKE '#AI/%')`);
+  } else if (source === 'local') {
+    where.push(`(source = 'local' AND content NOT LIKE '#AI/%')`);
+  } else if (source === 'import') {
+    where.push(`source IN ('flomo', 'import')`);
+  }
+  if (onThisDay) {
+    const now = new Date();
+    const md = String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    where.push(`strftime('%m-%d', created_at / 1000, 'unixepoch', 'localtime') = ? AND strftime('%Y', created_at / 1000, 'unixepoch', 'localtime') < ?`);
+    args.push(md, String(now.getFullYear()));
   }
   if (search) {
     // 正文和批注一起搜：正文走 FTS，批注走 LIKE
@@ -392,12 +412,15 @@ function listMemos({ tag = '', search = '', pin, since, until, random = false, h
       args.push(like);
     }
   }
-  const order = random ? 'ORDER BY RANDOM()' : 'ORDER BY pinned DESC, created_at DESC';
+  const orderSql = random ? 'ORDER BY RANDOM()'
+    : order === 'created_asc' ? 'ORDER BY pinned DESC, created_at ASC'
+    : order === 'updated_desc' ? 'ORDER BY pinned DESC, updated_at DESC'
+    : 'ORDER BY pinned DESC, created_at DESC';
   if (random) {
-    const sql = `${selectBase} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ${order} LIMIT ?`;
+    const sql = `${selectBase} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ${orderSql} LIMIT ?`;
     return hydrate(db.prepare(sql).all(...args, limit));
   }
-  const sql = `${selectBase} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ${order} LIMIT ? OFFSET ?`;
+  const sql = `${selectBase} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ${orderSql} LIMIT ? OFFSET ?`;
   return hydrate(db.prepare(sql).all(...args, limit, offset));
 }
 

@@ -385,6 +385,10 @@ async function route(req, res) {
         until: url.searchParams.get('until') || '',
         random: url.searchParams.get('random') === '1',
         has: url.searchParams.get('has') || '',
+        excludeTag: url.searchParams.get('excludeTag') || '',
+        source: url.searchParams.get('source') || '',
+        order: url.searchParams.get('order') || '',
+        onThisDay: url.searchParams.get('onThisDay') === '1',
         limit, offset,
       });
       const enriched = memos.map((m) => ({ ...m, backlinks: dbm.backlinksOf(m.id).length, comment_hit: dbm.commentHit(m.id, searchTerm) }));

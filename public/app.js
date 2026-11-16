@@ -34,6 +34,10 @@ const state = {
   heatMonth: null,
   // 默认折叠；只有用户明确展开过（存了 '1'）才展开
   subnavOpen: localStorage.getItem('subnavOpen') === '1',
+  // 视图：排序 / 来源 / 搜索筛选
+  view: { order: '', source: '', since: 0, until: 0, range: '', tagMode: '', tag: '', fhas: [], onThisDay: false },
+  selecting: false,
+  selected: new Set(),
 };
 
 let toastTimer;
@@ -103,15 +107,14 @@ function renderContent(text, highlight = '') {
   return html;
 }
 
-/* ---------------- 热力图（按月） ---------------- */
+/* ---------------- 热力图（按周列，仿 flomo：7 行 × N 周，底部月份） ---------------- */
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+const HEAT_WEEKS = 10;
+let heatLoadedDays = 154;
 
 function heatMonthStart() {
-  if (!state.heatMonth) {
-    const d = new Date();
-    state.heatMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-  }
-  return state.heatMonth;
+  if (state.heatOffset == null) state.heatOffset = 0;
+  return state.heatOffset;
 }
 
 function showHeatTip(cell, x, y) {
@@ -131,43 +134,72 @@ function hideHeatTip() {
   tip.hidden = true;
 }
 
+function heatRange() {
+  const offset = heatMonthStart();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const mondayIdx = (today.getDay() + 6) % 7;
+  const lastMonday = new Date(today); lastMonday.setDate(today.getDate() - mondayIdx - offset * HEAT_WEEKS * 7);
+  const start = new Date(lastMonday); start.setDate(lastMonday.getDate() - (HEAT_WEEKS - 1) * 7);
+  return { start, today };
+}
+
+async function ensureHeatData() {
+  const { start } = heatRange();
+  const need = Math.ceil((Date.now() - start.getTime()) / 86400000) + 1;
+  if (need <= heatLoadedDays) return;
+  const days = Math.min(400, need + 7 * HEAT_WEEKS);
+  try {
+    const { heatmap } = await api('/api/heatmap?days=' + days);
+    state.heatmap = Object.assign({}, heatmap, state.heatmap);
+    heatLoadedDays = days;
+  } catch (e) { /* 忽略，按已有数据画 */ }
+}
+
 function renderHeatmap() {
   const grid = $('#heat-grid');
-  const weekdays = $('#heat-weekdays');
-  const first = heatMonthStart();
-  const y = first.getFullYear();
-  const m = first.getMonth();
-  $('#heat-month').textContent = y + ' 年 ' + (m + 1) + ' 月';
-
-  weekdays.innerHTML = WEEK_LABELS.map((w) => '<span>' + w + '</span>').join('');
-  grid.innerHTML = '';
-
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const lead = (new Date(y, m, 1).getDay() + 6) % 7; // 周一为 0
-  const todayKey = dayKey(Date.now());
+  const months = $('#heat-months');
+  const { start, today } = heatRange();
+  const todayKey = dayKey(today.getTime());
   const max = Math.max(1, ...Object.values(state.heatmap));
+  grid.innerHTML = '';
+  grid.style.setProperty('--weeks', HEAT_WEEKS);
+  if (months) { months.innerHTML = ''; months.style.setProperty('--weeks', HEAT_WEEKS); }
 
-  for (let i = 0; i < lead; i++) {
-    const pad = document.createElement('div');
-    pad.className = 'heat-cell blank';
-    grid.appendChild(pad);
+  let lastMonth = -1;
+  for (let w = 0; w < HEAT_WEEKS; w++) {
+    for (let r = 0; r < 7; r++) {
+      const d = new Date(start); d.setDate(start.getDate() + w * 7 + r);
+      const key = dayKey(d.getTime());
+      const n = state.heatmap[key] || 0;
+      const cell = document.createElement('div');
+      cell.className = 'heat-cell day';
+      cell.style.setProperty('--i', w * 7 + r);
+      if (n > 0) cell.classList.add('l' + Math.min(4, 1 + Math.floor((n / max) * 3.999)));
+      if (key === todayKey) cell.classList.add('today');
+      if (key > todayKey) cell.classList.add('future');
+      if (key === state.filter.value && state.filter.type === 'day') cell.classList.add('picked');
+      cell.dataset.key = key;
+      cell.dataset.n = n;
+      cell.dataset.label = (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日 周' + WEEK_LABELS[r];
+      grid.appendChild(cell);
+      // 月份标签：该列包含某月 1 号，或第一列
+      if (months && r === 0) {
+        const colEnd = new Date(d); colEnd.setDate(d.getDate() + 6);
+        const m = (w === 0) ? d.getMonth() : (colEnd.getDate() <= 7 ? colEnd.getMonth() : -1);
+        if (m !== -1 && m !== lastMonth) {
+          const lab = document.createElement('span');
+          lab.textContent = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'][m] + '月';
+          lab.style.gridColumn = (w + 1) + ' / span 3';
+          months.appendChild(lab);
+          lastMonth = m;
+        }
+      }
+    }
   }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const key = y + '-' + pad2(m + 1) + '-' + pad2(d);
-    const n = state.heatmap[key] || 0;
-    const cell = document.createElement('div');
-    cell.className = 'heat-cell day';
-    cell.style.setProperty('--i', lead + d);
-    if (n > 0) cell.classList.add('l' + Math.min(4, 1 + Math.floor((n / max) * 3.999)));
-    if (key === todayKey) cell.classList.add('today');
-    if (key > todayKey) cell.classList.add('future');
-    cell.dataset.key = key;
-    cell.dataset.n = n;
-    cell.dataset.label = (m + 1) + ' 月 ' + d + ' 日';
-    cell.innerHTML = '<span>' + d + '</span>';
-    if (key === state.filter.value && state.filter.type === 'day') cell.classList.add('picked');
-    grid.appendChild(cell);
-  }
+  const end = new Date(start); end.setDate(start.getDate() + HEAT_WEEKS * 7 - 1);
+  const fmt = (x) => (x.getMonth() + 1) + '.' + x.getDate();
+  $('#heat-month').textContent = (start.getFullYear() !== today.getFullYear() ? start.getFullYear() + ' · ' : '') + fmt(start) + ' – ' + fmt(end > today ? today : end);
+  $('#heat-next').disabled = heatMonthStart() === 0;
 }
 
 $('#heat').addEventListener('mouseover', (e) => {
@@ -179,21 +211,26 @@ $('#heat').addEventListener('mouseover', (e) => {
 $('#heat').addEventListener('mouseout', (e) => {
   if (e.target.closest('.heat-cell.day')) hideHeatTip();
 });
-$('#heat').addEventListener('click', (e) => {
+$('#heat').addEventListener('click', async (e) => {
   const btn = e.target.closest('#heat-prev, #heat-next');
   if (btn) {
-    const cur = heatMonthStart();
-    const delta = btn.id === 'heat-prev' ? -1 : 1;
-    state.heatMonth = new Date(cur.getFullYear(), cur.getMonth() + delta, 1);
+    const delta = btn.id === 'heat-prev' ? 1 : -1;
+    state.heatOffset = Math.max(0, heatMonthStart() + delta);
     hideHeatTip();
+    await ensureHeatData();
+    const grid = $('#heat-grid');
+    grid.classList.remove('slide-l', 'slide-r');
+    void grid.offsetWidth;
+    grid.classList.add(delta > 0 ? 'slide-r' : 'slide-l');
     renderHeatmap();
     return;
   }
   const cell = e.target.closest('.heat-cell.day');
-  if (!cell) return;
+  if (!cell || cell.classList.contains('future')) return;
   hideHeatTip();
   setFilter({ type: 'day', value: cell.dataset.key });
 });
+
 
 /* ---------------- 标签树 ---------------- */
 function buildTreeView() {
@@ -383,7 +420,21 @@ function memoNode(m) {
   const backCount = Array.isArray(m.backlinks) ? m.backlinks.length : Number(m.backlinks || 0);
   const commentCount = Array.isArray(m.comments) ? m.comments.length : Number(m.comments || 0);
   const isEdited = m.updated_at && m.updated_at - m.created_at > 60000;
+  const cd = new Date(m.created_at);
+  const fullTime = cd.getFullYear() + '-' + pad(cd.getMonth() + 1) + '-' + pad(cd.getDate()) + ' ' + fmtTime(m.created_at);
   el.innerHTML =
+    '<span class="memo-check" aria-hidden="true"></span>' +
+    '<div class="memo-foot memo-head">' +
+      '<span class="memo-time" title="' + cd.toLocaleString() + '">' + fullTime + '</span>' +
+      '<span class="memo-tags muted small">' + (m.tags || []).map((t) => '#' + escapeHtml(t)).join(' ') + '</span>' +
+      (commentCount ? '<button class="memo-comment-count" data-act="comment-toggle" title="批注">✎ ' + commentCount + '</button>' : '') +
+      (backCount ? '<span class="memo-back" title="有几条笔记引用了它">↩ ' + backCount + '</span>' : '') +
+      '<span class="memo-words muted small">' + words + ' 字' + (isEdited ? ' · 编辑于 ' + fmtTime(m.updated_at) : '') + '</span>' +
+      '<div class="memo-actions">' +
+        '<button class="memo-ai" data-act="insight" title="用 AI 看这条笔记">✧<span class="ai-label"> AI 洞察</span></button>' +
+        '<button class="memo-dot" data-act="menu" title="更多">⋯</button>' +
+      '</div>' +
+    '</div>' +
     '<div class="memo-body">' + renderContent(m.content, state.search) + '</div>' +
     (m.comment_hit ? '<div class="comment-hit">批注：' + escapeHtml(String(m.comment_hit).slice(0, 120)) + '</div>' : '') +
     (m.files && m.files.length ? '<div class="att-grid">' + m.files.map(fileBlock).join('') + '</div>' : '') +
@@ -392,17 +443,6 @@ function memoNode(m) {
       '<div class="comment-input">' +
         '<input type="text" placeholder="写一句批注…（回车发送；@明天 / @2026-11-20 可设提醒）" maxlength="2000">' +
         '<button class="mini-btn" data-act="comment-send">发送</button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="memo-foot">' +
-      '<span class="memo-time" title="' + new Date(m.created_at).toLocaleString() + '">' + fmtTime(m.created_at) + '</span>' +
-      '<span class="memo-tags muted small">' + (m.tags || []).map((t) => '#' + t).join(' ') + '</span>' +
-      (commentCount ? '<button class="memo-comment-count" data-act="comment-toggle" title="批注">✎ ' + commentCount + '</button>' : '') +
-      (backCount ? '<span class="memo-back" title="有几条笔记引用了它">↩ ' + backCount + '</span>' : '') +
-      '<span class="memo-words muted small">' + words + ' 字' + (isEdited ? ' · 编辑于 ' + fmtTime(m.updated_at) : '') + '</span>' +
-      '<div class="memo-actions">' +
-        '<button class="memo-ai" data-act="insight" title="用 AI 看这条笔记">✧<span class="ai-label"> AI 洞察</span></button>' +
-        '<button class="memo-dot" data-act="menu" title="更多">⋯</button>' +
       '</div>' +
     '</div>' +
     '<div class="related-box" hidden></div>';
@@ -510,7 +550,7 @@ $('#memo-list').addEventListener('click', async (ev) => {
 function renderListTitle() {
   const f = state.filter;
   const hasLabel = { notags: '无标签', images: '有图片', videos: '有视频', audio: '有语音', links: '有链接' }[state.has];
-  const title = hasLabel ? '全部笔记 · ' + hasLabel
+  const title = state.view.onThisDay ? '那年今日' : hasLabel ? '全部笔记 · ' + hasLabel
     : f.type === 'day' ? (() => { const [yy, mm, dd] = String(f.value).split('-').map(Number); return yy + ' 年 ' + mm + ' 月 ' + dd + ' 日'; })()
     : f.type === 'tag' ? '#' + f.value
     : f.type === 'today' ? '今日'
@@ -545,7 +585,17 @@ async function loadMemos({ append = false } = {}) {
     q.set('until', String(new Date(yy, mm - 1, dd + 1).getTime()));
   }
   if (state.search) q.set('search', state.search);
-  if (state.has) q.set('has', state.has);
+  const vw = state.view;
+  const hasList = [state.has, ...vw.fhas].filter(Boolean);
+  if (vw.tagMode === 'notags') hasList.push('notags');
+  if (hasList.length) q.set('has', [...new Set(hasList)].join(','));
+  if (vw.order) q.set('order', vw.order);
+  if (vw.source) q.set('source', vw.source);
+  if (vw.onThisDay) q.set('onThisDay', '1');
+  if (vw.tag && vw.tagMode === 'include' && f.type !== 'tag') q.set('tag', vw.tag);
+  if (vw.tag && vw.tagMode === 'exclude') q.set('excludeTag', vw.tag);
+  if (vw.since && !q.has('since')) q.set('since', String(vw.since));
+  if (vw.until && !q.has('until')) q.set('until', String(vw.until));
   let memos = (await api('/api/memos?' + q.toString())).memos;
   if (f.type === 'today') {
     const start = new Date(); start.setHours(0, 0, 0, 0);
@@ -581,6 +631,7 @@ async function refreshBootstrap() {
 async function setFilter(f) {
   state.filter = f;
   state.has = '';
+  state.view.onThisDay = false;
   state.offset = 0;
   await loadMemos();
 }
@@ -1791,3 +1842,358 @@ document.addEventListener('pointermove', (e) => {
   card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
   card.style.setProperty('--my', (e.clientY - r.top) + 'px');
 }, { passive: true });
+
+/* ================= 顶栏视图菜单 / 搜索 / 筛选 / 工具栏 / 多选 ================= */
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+function popOpen(el) {
+  if (!el) return;
+  el.classList.remove('closing');
+  el.hidden = false;
+  replayClass(el, 'opening');
+}
+function popClose(el) {
+  if (!el || el.hidden || el.classList.contains('closing')) return;
+  if (reduceMotion()) { el.hidden = true; return; }
+  el.classList.add('closing');
+  setTimeout(() => { if (el.classList.contains('closing')) { el.hidden = true; el.classList.remove('closing'); } }, 170);
+}
+const POPS = ['#view-pop', '#search-pop', '#filter-pop', '#mention-pop'];
+function closePopsExcept(keep) { POPS.forEach((s) => { if (s !== keep) popClose($(s)); }); }
+
+/* 折叠区：高度动画 */
+function toggleAcc(root, key, force) {
+  const body = root.querySelector('[data-acc-body="' + key + '"]');
+  const head = root.querySelector('[data-acc="' + key + '"]');
+  if (!body) return;
+  const open = force !== undefined ? force : !body.classList.contains('open');
+  body.classList.toggle('open', open);
+  if (head) head.classList.toggle('open', open);
+}
+
+/* ---- 视图菜单：排序 / 来源 / 多选 / 导出 ---- */
+const ORDER_LABEL = { '': '创建时间，从新到旧', created_asc: '创建时间，从旧到新', updated_desc: '最近编辑' };
+const SOURCE_LABEL = { '': '全部', local: '本地记录', ai: 'AI 生成', import: '导入' };
+function syncViewPop() {
+  $('#sort-label').textContent = ORDER_LABEL[state.view.order] || ORDER_LABEL[''];
+  $('#source-label').textContent = SOURCE_LABEL[state.view.source] || '全部';
+  document.querySelectorAll('#view-pop [data-order]').forEach((b) => b.classList.toggle('on', b.dataset.order === state.view.order));
+  document.querySelectorAll('#view-pop [data-source]').forEach((b) => b.classList.toggle('on', b.dataset.source === state.view.source));
+}
+$('#btn-view').onclick = (e) => {
+  e.stopPropagation();
+  const pop = $('#view-pop');
+  if (!pop.hidden && !pop.classList.contains('closing')) { popClose(pop); $('#btn-view').classList.remove('open'); return; }
+  closePopsExcept('#view-pop');
+  syncViewPop();
+  popOpen(pop);
+  $('#btn-view').classList.add('open');
+};
+$('#view-pop').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const acc = e.target.closest('[data-acc]');
+  if (acc) { toggleAcc($('#view-pop'), acc.dataset.acc); return; }
+  const ord = e.target.closest('[data-order]');
+  if (ord) { state.view.order = ord.dataset.order; syncViewPop(); loadMemos(); return; }
+  const src = e.target.closest('[data-source]');
+  if (src) { state.view.source = src.dataset.source; syncViewPop(); syncFilterPop(); loadMemos(); return; }
+  if (e.target.closest('#btn-multi')) { popClose($('#view-pop')); $('#btn-view').classList.remove('open'); enterSelect(); return; }
+  if (e.target.closest('#btn-view-export')) { popClose($('#view-pop')); $('#btn-view').classList.remove('open'); window.location.href = '/api/export'; }
+});
+
+/* ---- 搜索框：快捷搜索 + 最近搜索 + 关键词 / AI 模式 ---- */
+state.searchMode = 'kw';
+const RECENT_KEY = 'recentSearch';
+const getRecent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; } };
+function pushRecent(q) {
+  if (!q) return;
+  const list = [q, ...getRecent().filter((x) => x !== q)].slice(0, 6);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+}
+function renderRecent() {
+  const list = getRecent();
+  $('#recent-cap').hidden = !list.length;
+  $('#recent-list').innerHTML = list.map((q) => '<button class="opt" data-recent="' + escapeHtml(q) + '">' + escapeHtml(q) + '</button>').join('');
+}
+function setSearchMode(mode) {
+  state.searchMode = mode;
+  document.querySelectorAll('#search-mode [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+  $('#search-wrap').classList.toggle('ai-mode', mode === 'ai');
+  $('#search').placeholder = mode === 'ai' ? '问一个只有笔记知道的问题，回车提问' : 'Ctrl+K';
+}
+$('#search').addEventListener('focus', () => {
+  $('#search-wrap').classList.add('focus');
+  closePopsExcept('#search-pop');
+  renderRecent();
+  if (!$('#search').value) popOpen($('#search-pop'));
+});
+$('#search').addEventListener('blur', () => {
+  setTimeout(() => {
+    if (!$('#search-wrap').contains(document.activeElement)) { $('#search-wrap').classList.remove('focus'); popClose($('#search-pop')); }
+  }, 120);
+});
+$('#search').addEventListener('input', () => { if ($('#search').value) popClose($('#search-pop')); else popOpen($('#search-pop')); }, true);
+$('#search').addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') { e.preventDefault(); setSearchMode(state.searchMode === 'kw' ? 'ai' : 'kw'); return; }
+  if (e.key === 'Enter') {
+    const q = $('#search').value.trim();
+    if (!q) return;
+    pushRecent(q);
+    if (state.searchMode === 'ai') {
+      e.preventDefault();
+      const chip = document.querySelector('#rail-tabs [data-ai="ask"]');
+      if (chip) chip.click();
+      $('#ask-input').value = q;
+      openRail();
+      runAi('ask', { question: q });
+    }
+  }
+});
+$('#search-mode').addEventListener('mousedown', (e) => {
+  const b = e.target.closest('[data-mode]');
+  if (!b) return;
+  e.preventDefault();
+  setSearchMode(b.dataset.mode);
+});
+$('#search-pop').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  const quick = e.target.closest('[data-quick]');
+  if (quick) {
+    const k = quick.dataset.quick;
+    $('#search').blur();
+    if (k === 'onthisday') { state.view.onThisDay = true; state.filter = { type: 'all' }; state.has = ''; loadMemos(); }
+    else setFilter({ type: k });
+    return;
+  }
+  const rec = e.target.closest('[data-recent]');
+  if (rec) {
+    $('#search').value = rec.dataset.recent;
+    $('#search').dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+
+/* ---- 筛选面板 ---- */
+function fillFilterTags() {
+  const sel = $('#flt-tag');
+  const cur = state.view.tag;
+  sel.innerHTML = '<option value="">选择标签…</option>' + state.tags.map((t) => '<option value="' + escapeHtml(t.name) + '">#' + escapeHtml(t.name) + '</option>').join('');
+  sel.value = cur;
+}
+const toDateInput = (ms) => { if (!ms) return ''; const d = new Date(ms); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+function syncFilterPop() {
+  const v = state.view;
+  document.querySelectorAll('#filter-pop [data-range]').forEach((b) => b.classList.toggle('on', b.dataset.range === v.range));
+  document.querySelectorAll('#filter-pop [data-tagmode]').forEach((b) => b.classList.toggle('on', b.dataset.tagmode === v.tagMode));
+  document.querySelectorAll('#filter-pop [data-fhas]').forEach((b) => b.classList.toggle('on', v.fhas.includes(b.dataset.fhas)));
+  document.querySelectorAll('#filter-pop [data-fsource]').forEach((b) => b.classList.toggle('on', b.dataset.fsource === v.source));
+  $('#flt-tag').hidden = !(v.tagMode === 'include' || v.tagMode === 'exclude');
+  if (v.range !== 'custom') { $('#flt-since').value = toDateInput(v.since); $('#flt-until').value = toDateInput(v.until ? v.until - 86400000 : 0); }
+  const active = !!(v.range || v.tagMode || v.fhas.length || v.source || v.onThisDay);
+  $('#btn-filter').classList.toggle('active', active);
+  $('#list-sub').dataset.filter = active ? '1' : '';
+}
+function rangeOf(key) {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const end = now.getTime() + 86400000;
+  if (key === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1).getTime(), end];
+  if (key === 'lastmonth') return [new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime(), new Date(now.getFullYear(), now.getMonth(), 1).getTime()];
+  const n = Number(key);
+  return [end - n * 86400000, end];
+}
+$('#btn-filter').onclick = (e) => {
+  e.stopPropagation();
+  const pop = $('#filter-pop');
+  if (!pop.hidden && !pop.classList.contains('closing')) { popClose(pop); return; }
+  closePopsExcept('#filter-pop');
+  fillFilterTags();
+  syncFilterPop();
+  popOpen(pop);
+};
+$('#filter-pop').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const v = state.view;
+  const acc = e.target.closest('[data-acc]');
+  if (acc) { toggleAcc($('#filter-pop'), acc.dataset.acc); return; }
+  const r = e.target.closest('[data-range]');
+  if (r) {
+    if (v.range === r.dataset.range) { v.range = ''; v.since = 0; v.until = 0; }
+    else { v.range = r.dataset.range; [v.since, v.until] = rangeOf(v.range); }
+  }
+  const tm = e.target.closest('[data-tagmode]');
+  if (tm) {
+    v.tagMode = v.tagMode === tm.dataset.tagmode ? '' : tm.dataset.tagmode;
+    if (v.tagMode === 'notags' || !v.tagMode) v.tag = '';
+    syncFilterPop();
+    if (v.tagMode === 'include' || v.tagMode === 'exclude') { $('#flt-tag').focus(); if (!v.tag) return; }
+  }
+  const fh = e.target.closest('[data-fhas]');
+  if (fh) { const k = fh.dataset.fhas; v.fhas = v.fhas.includes(k) ? v.fhas.filter((x) => x !== k) : [...v.fhas, k]; }
+  const fs = e.target.closest('[data-fsource]');
+  if (fs) v.source = v.source === fs.dataset.fsource ? '' : fs.dataset.fsource;
+  if (e.target.closest('#btn-filter-clear')) {
+    Object.assign(v, { source: '', since: 0, until: 0, range: '', tagMode: '', tag: '', fhas: [], onThisDay: false });
+  }
+  if (r || fh || fs || e.target.closest('#btn-filter-clear')) { syncFilterPop(); syncViewPop(); loadMemos(); }
+});
+$('#flt-tag').onchange = () => { state.view.tag = $('#flt-tag').value; loadMemos(); };
+['#flt-since', '#flt-until'].forEach((s) => $(s).addEventListener('change', () => {
+  const a = $('#flt-since').value, b = $('#flt-until').value;
+  const v = state.view;
+  v.range = (a || b) ? 'custom' : '';
+  v.since = a ? new Date(a + 'T00:00:00').getTime() : 0;
+  v.until = b ? new Date(b + 'T00:00:00').getTime() + 86400000 : 0;
+  syncFilterPop();
+  loadMemos();
+}));
+
+/* 点外部关闭所有弹层 */
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.pop') || e.target.closest('#btn-view') || e.target.closest('#btn-filter') || e.target.closest('[data-tool="mention"]')) return;
+  closePopsExcept(null);
+  $('#btn-view').classList.remove('open');
+});
+
+/* ---- 输入框工具栏 ---- */
+function wrapSel(before, after = '', placeholder = '') {
+  const s = draft.selectionStart, t = draft.selectionEnd;
+  const sel = draft.value.slice(s, t) || placeholder;
+  draft.setRangeText(before + sel + after, s, t, 'end');
+  if (!draft.value.slice(s, t).length && placeholder) {
+    draft.selectionStart = s + before.length;
+    draft.selectionEnd = s + before.length + sel.length;
+  }
+  draft.focus();
+  updateHint();
+}
+function prefixLines(fn) {
+  const v = draft.value;
+  let s = v.lastIndexOf('\n', draft.selectionStart - 1) + 1;
+  let t = v.indexOf('\n', draft.selectionEnd); if (t === -1) t = v.length;
+  const lines = v.slice(s, t).split('\n').map((l, i) => fn(l, i));
+  draft.setRangeText(lines.join('\n'), s, t, 'end');
+  draft.focus();
+  updateHint();
+}
+$('#composer-tools').addEventListener('mousedown', (e) => { if (e.target.closest('[data-tool]')) e.preventDefault(); });
+$('#composer-tools').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tool]');
+  if (!b) return;
+  replayClass(b, 'tap');
+  const tool = b.dataset.tool;
+  if (tool === 'tag') wrapSel('#', ' ', '');
+  if (tool === 'bold') wrapSel('**', '**', '加粗');
+  if (tool === 'ul') prefixLines((l) => (/^- /.test(l) ? l.slice(2) : '- ' + l));
+  if (tool === 'ol') prefixLines((l, i) => (/^\d+\. /.test(l) ? l.replace(/^\d+\. /, '') : (i + 1) + '. ' + l));
+  if (tool === 'mention') openMention();
+});
+
+/* ---- @ 引用笔记 ---- */
+let mentionTimer, mentionFromAt = false;
+async function fillMention(q) {
+  const qs = new URLSearchParams({ limit: 8 });
+  if (q) qs.set('search', q);
+  let memos = [];
+  try { memos = (await api('/api/memos?' + qs.toString())).memos; } catch (e) { /* 忽略 */ }
+  const box = $('#mention-list');
+  if (!memos.length) { box.innerHTML = '<div class="muted small mention-empty">没有匹配的笔记</div>'; return; }
+  box.innerHTML = memos.map((m, i) => '<button class="opt mention-item' + (i === 0 ? ' on' : '') + '" data-slug="' + escapeHtml(m.slug) + '" style="--d:' + i + '">' +
+    '<span>' + escapeHtml(String(m.content).replace(/\s+/g, ' ').slice(0, 60)) + '</span><small>' + dayLabel(m.created_at) + '</small></button>').join('');
+}
+function openMention(fromAt = false) {
+  mentionFromAt = fromAt;
+  closePopsExcept('#mention-pop');
+  $('#mention-q').value = '';
+  popOpen($('#mention-pop'));
+  fillMention('');
+  setTimeout(() => $('#mention-q').focus(), 30);
+}
+function pickMention(slug) {
+  popClose($('#mention-pop'));
+  draft.focus();
+  if (mentionFromAt) {
+    const p = draft.selectionStart;
+    if (draft.value[p - 1] === '@') draft.setRangeText('', p - 1, p, 'end');
+  }
+  wrapSel('[[' + slug + ']] ');
+}
+$('#mention-q').addEventListener('input', () => { clearTimeout(mentionTimer); mentionTimer = setTimeout(() => fillMention($('#mention-q').value.trim()), 160); });
+$('#mention-q').addEventListener('keydown', (e) => {
+  const items = [...document.querySelectorAll('#mention-list .mention-item')];
+  const idx = items.findIndex((x) => x.classList.contains('on'));
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!items.length) return;
+    const next = (idx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((x, i) => x.classList.toggle('on', i === next));
+    items[next].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (items[idx]) pickMention(items[idx].dataset.slug);
+  } else if (e.key === 'Escape') {
+    e.preventDefault(); e.stopPropagation();
+    popClose($('#mention-pop')); draft.focus();
+  }
+});
+$('#mention-list').addEventListener('click', (e) => { const b = e.target.closest('.mention-item'); if (b) pickMention(b.dataset.slug); });
+draft.addEventListener('input', (e) => { if (e.data === '@') openMention(true); });
+
+/* ---- 多选笔记 ---- */
+state.selected = new Set();
+function syncSelectBar() {
+  $('#select-count').textContent = '已选 ' + state.selected.size + ' 条';
+  document.querySelectorAll('.memo').forEach((c) => c.classList.toggle('selected', state.selected.has(Number(c.dataset.id))));
+}
+function enterSelect() {
+  state.selected.clear();
+  document.body.classList.add('select-mode');
+  popOpen($('#select-bar'));
+  syncSelectBar();
+}
+function exitSelect() {
+  document.body.classList.remove('select-mode');
+  state.selected.clear();
+  syncSelectBar();
+  popClose($('#select-bar'));
+}
+$('#memo-list').addEventListener('click', (e) => {
+  if (!document.body.classList.contains('select-mode')) return;
+  const card = e.target.closest('.memo');
+  if (!card) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  const id = Number(card.dataset.id);
+  if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
+  replayClass(card, 'tick');
+  syncSelectBar();
+}, true);
+$('#sel-all').onclick = () => {
+  const all = state.memos.map((m) => m.id);
+  if (state.selected.size === all.length) state.selected.clear(); else all.forEach((id) => state.selected.add(id));
+  syncSelectBar();
+};
+$('#sel-pin').onclick = async () => {
+  if (!state.selected.size) return toast('先选几条笔记');
+  for (const id of state.selected) await api('/api/memos/' + id, { method: 'PUT', body: { pinned: true } });
+  toast('已置顶 ' + state.selected.size + ' 条');
+  exitSelect(); await loadMemos();
+};
+$('#sel-export').onclick = () => {
+  if (!state.selected.size) return toast('先选几条笔记');
+  const md = state.memos.filter((m) => state.selected.has(m.id)).map((m) => {
+    const d = new Date(m.created_at);
+    return '## ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + fmtTime(m.created_at) + '\n\n' + m.content + '\n';
+  }).join('\n---\n\n');
+  downloadFile('flomo-local-' + state.selected.size + '-notes.md', md, 'text/markdown;charset=utf-8');
+};
+$('#sel-del').onclick = async () => {
+  if (!state.selected.size) return toast('先选几条笔记');
+  if (!confirm('删除选中的 ' + state.selected.size + ' 条笔记？（不可恢复）')) return;
+  const ids = [...state.selected];
+  ids.forEach((id) => { const c = document.querySelector('.memo[data-id="' + id + '"]'); if (c) c.classList.add('leaving'); });
+  if (!reduceMotion()) await new Promise((r) => setTimeout(r, 360));
+  for (const id of ids) await api('/api/memos/' + id, { method: 'DELETE' });
+  toast('已删除 ' + ids.length + ' 条');
+  exitSelect(); await refreshBootstrap(); await loadMemos();
+};
+$('#sel-done').onclick = exitSelect;
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('select-mode')) exitSelect();
+});
