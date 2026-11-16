@@ -1,6 +1,7 @@
 'use strict';
 // server.js — 本地笔记服务（零依赖）：静态页面 + 本地 REST API + 大模型流式代理
 const http = require('http');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
@@ -36,6 +37,59 @@ function saveUpload(f) {
 }
 
 const tagState = () => ({ tags: dbm.listTags(), tagTree: dbm.tagTree() });
+
+/* ---------------- 批注里的 @提醒 ---------------- */
+function atNine(d) { const x = new Date(d); x.setHours(9, 0, 0, 0); return x.getTime(); }
+function parseRemind(text) {
+  const s = String(text || '');
+  let m = s.match(/@(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 9, 0, 0, 0).getTime();
+  m = s.match(/@(今天晚上|今晚|今天|明天晚上|明晚|明天|后天|下周[一二三四五六日天]?|下个月)/);
+  if (m) {
+    const base = new Date();
+    const word = m[1];
+    if (word === '今晚' || word === '今天晚上') { base.setHours(20, 0, 0, 0); return base.getTime(); }
+    if (word === '今天') return atNine(base);
+    if (word === '明天' || word === '明晚' || word === '明天晚上') {
+      base.setDate(base.getDate() + 1);
+      if (word !== '明天') { base.setHours(20, 0, 0, 0); return base.getTime(); }
+      return atNine(base);
+    }
+    if (word === '后天') { base.setDate(base.getDate() + 2); return atNine(base); }
+    if (word === '下个月') { base.setMonth(base.getMonth() + 1, 1); return atNine(base); }
+    const map = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
+    const want = map[word.slice(2)] !== undefined ? map[word.slice(2)] : 1;
+    const d = new Date(base);
+    const delta = ((want - d.getDay()) + 7) % 7 || 7;
+    d.setDate(d.getDate() + delta);
+    return atNine(d);
+  }
+  if (/@提醒/.test(s)) { const d = new Date(); d.setHours(20, 0, 0, 0); return d.getTime(); }
+  return null;
+}
+
+/* ---------------- 在真正的桌面建快捷方式（设置里的按钮） ---------------- */
+function makeShortcut() {
+  const script = path.join(__dirname, 'tools', 'make-shortcut.ps1');
+  if (!fs.existsSync(script)) return Promise.reject(new Error('缺少 tools/make-shortcut.ps1'));
+  return new Promise((resolve, reject) => {
+    const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Quiet'], {
+      cwd: __dirname, windowsHide: true,
+    });
+    let out = '';
+    const timer = setTimeout(() => { try { ps.kill(); } catch (e) { } reject(new Error('创建超时')); }, 25000);
+    ps.stdout.on('data', (d) => { out += d.toString('utf8'); });
+    ps.stderr.on('data', (d) => { out += d.toString('utf8'); });
+    ps.on('error', (e) => { clearTimeout(timer); reject(e); });
+    ps.on('close', (code) => {
+      clearTimeout(timer);
+      const line = out.split(/\r?\n/).reverse().find((l) => l.includes('已创建：')) || '';
+      const p = line.split('已创建：')[1] ? line.split('已创建：')[1].trim() : '';
+      if (code === 0 && p) resolve({ path: p, output: out.trim() });
+      else reject(new Error(out.trim() || ('powershell 退出码 ' + code)));
+    });
+  });
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -254,6 +308,7 @@ async function route(req, res) {
         prompts: llm.listPrompts(),
         llm: llm.publicConfig(),
         storage: { path: path.join(__dirname, 'data', 'flomo.db'), fts: dbm.fts },
+        reminders: dbm.reminderCount(),
         app: { version: APP_VERSION },
       });
     }
@@ -263,6 +318,35 @@ async function route(req, res) {
     }
     if (p === '/api/version' && req.method === 'GET') {
       return json(res, 200, { name: 'flomo local', version: APP_VERSION });
+    }
+    if (p === '/api/shortcut' && req.method === 'POST') {
+      try {
+        const r = await makeShortcut();
+        return json(res, 200, { ok: true, path: r.path });
+      } catch (e) {
+        return json(res, 500, { error: String(e.message || e) });
+      }
+    }
+    if (p === '/api/update/apply' && req.method === 'POST') {
+      try {
+        const info = await checkUpdate(true);
+        if (info.error) return json(res, 502, { error: '检查更新失败：' + info.error });
+        if (!info.hasUpdate) return json(res, 400, { error: '已经是最新版本' });
+        const dl = await downloadUpdate(info);
+        const ps1 = writeApplyScript(dl.zip);
+        const latest = info.latest;
+        setTimeout(() => {
+          try {
+            spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1], {
+              detached: true, stdio: 'ignore', windowsHide: true, cwd: __dirname,
+            }).unref();
+          } catch (e) { /* 交给用户手动重启 */ }
+          setTimeout(() => process.exit(0), 300);
+        }, 500);
+        return json(res, 200, { ok: true, latest, size: dl.size, note: '正在替换文件并重启服务' });
+      } catch (e) {
+        return json(res, 500, { error: String(e.message || e) });
+      }
     }
     if (p === '/api/config' && req.method === 'POST') {
       const body = await readBody(req);
@@ -280,9 +364,10 @@ async function route(req, res) {
       const limit = Math.min(Number(url.searchParams.get('limit') || 50), 200);
       const offset = Math.max(Number(url.searchParams.get('offset') || 0), 0);
       const pinParam = url.searchParams.get('pinned');
+      const searchTerm = url.searchParams.get('search') || '';
       const memos = dbm.listMemos({
         tag: url.searchParams.get('tag') || '',
-        search: url.searchParams.get('search') || '',
+        search: searchTerm,
         pin: pinParam === null ? undefined : pinParam === '1',
         since: url.searchParams.get('since') || '',
         until: url.searchParams.get('until') || '',
@@ -290,7 +375,7 @@ async function route(req, res) {
         has: url.searchParams.get('has') || '',
         limit, offset,
       });
-      const enriched = memos.map((m) => ({ ...m, backlinks: dbm.backlinksOf(m.id).length }));
+      const enriched = memos.map((m) => ({ ...m, backlinks: dbm.backlinksOf(m.id).length, comment_hit: dbm.commentHit(m.id, searchTerm) }));
       return json(res, 200, { memos: enriched, hasMore: memos.length === limit });
     }
     if (p === '/api/memos' && req.method === 'POST') {
@@ -405,8 +490,23 @@ async function route(req, res) {
         const body = await readBody(req);
         const content = String(body.content || '').trim();
         if (!content) return json(res, 400, { error: '批注不能为空' });
-        return json(res, 200, { comment: dbm.addComment(id, content), memo: dbm.getMemo(id) });
+        const remindAt = body.remindAt ? Number(body.remindAt) : parseRemind(content);
+        return json(res, 200, { comment: dbm.addComment(id, content, remindAt), memo: dbm.getMemo(id) });
       }
+    }
+
+    if (p === '/api/reminders' && req.method === 'GET') {
+      const includeDone = url.searchParams.get('done') === '1';
+      return json(res, 200, {
+        reminders: dbm.reminders({ includeDone }),
+        count: dbm.reminderCount(),
+        now: Date.now(),
+      });
+    }
+
+    if (p.startsWith('/api/comments/') && p.endsWith('/done') && req.method === 'POST') {
+      const id = Number(p.slice('/api/comments/'.length, -'/done'.length));
+      return json(res, 200, { done: dbm.clearReminder(id), count: dbm.reminderCount() });
     }
 
     if (p.startsWith('/api/comments/') && req.method === 'DELETE') {
@@ -481,6 +581,7 @@ async function route(req, res) {
 
 // ---- 检查更新（方法一：拉 GitHub 上的 version.json）----
 const UPDATE_REPO = 'Nitgomare/flomo-local';
+const UPDATE_REPO_URL = 'https://github.com/' + UPDATE_REPO;
 const UPDATE_VERSION_URL = 'https://raw.githubusercontent.com/' + UPDATE_REPO + '/main/version.json';
 const UPDATE_RELEASE_URL = 'https://github.com/' + UPDATE_REPO + '/releases/latest';
 let updateCache = { at: 0, data: null };
@@ -507,12 +608,15 @@ async function checkUpdate(force) {
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const remote = await r.json();
+    const latest = String(remote.version || '');
+    const hasUpdate = compareVersion(latest, APP_VERSION) > 0;
     const data = {
       current: APP_VERSION,
-      latest: String(remote.version || ''),
-      hasUpdate: compareVersion(remote.version, APP_VERSION) > 0,
+      latest,
+      hasUpdate,
       notes: String(remote.notes || ''),
       url: String(remote.url || UPDATE_RELEASE_URL),
+      asset: hasUpdate ? UPDATE_APP_ZIP(latest) : '',
       checkedAt: Date.now(),
     };
     updateCache = { at: Date.now(), data };
@@ -522,6 +626,63 @@ async function checkUpdate(force) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/* ---------------- 自动更新：下载 → 解压 → 覆盖 → 重启 ---------------- */
+const UPDATE_APP_ZIP = (v) => UPDATE_REPO_URL + '/releases/download/v' + v + '/flomo-local-' + v + '-app.zip';
+
+async function downloadUpdate(info) {
+  const dir = path.join(__dirname, 'data', 'update');
+  fs.mkdirSync(dir, { recursive: true });
+  const zip = path.join(dir, 'app.zip');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 180000);
+  try {
+    const r = await fetch(info.asset, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: { 'user-agent': 'flomo-local/' + APP_VERSION },
+    });
+    if (!r.ok) throw new Error('下载失败 HTTP ' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length < 2000 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new Error('下载内容不是 zip（可能被网络拦截）');
+    fs.writeFileSync(zip, buf);
+    return { zip, size: buf.length };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function writeApplyScript(zipPath) {
+  const dir = path.join(__dirname, 'data', 'update');
+  const src = path.join(dir, 'app');
+  fs.rmSync(src, { recursive: true, force: true });
+  const ps1 = path.join(dir, 'apply.ps1');
+  const q = (p) => "'" + String(p).replace(/'/g, "''") + "'";
+  const root = __dirname.replace(/\\/g, '\\');
+  const nodeExe = process.execPath;
+  const content = [
+    "$ErrorActionPreference = 'SilentlyContinue'",
+    '$root = ' + q(root),
+    '$zip = ' + q(zipPath),
+    '$src = ' + q(src),
+    '$node = ' + q(nodeExe),
+    '$port = ' + PORT,
+    'function Port-Free {',
+    '  try { $c = New-Object Net.Sockets.TcpClient; $c.Connect("127.0.0.1", $port); $c.Close(); return $false } catch { return $true }',
+    '}',
+    'for ($i = 0; $i -lt 120; $i++) { if (Port-Free) { break }; Start-Sleep -Milliseconds 250 }',
+    'Start-Sleep -Milliseconds 400',
+    'Expand-Archive -LiteralPath $zip -DestinationPath $src -Force',
+    'robocopy $src $root /E /NFL /NDL /NJH /NJS /XD (Join-Path $root "data") (Join-Path $root "runtime") | Out-Null',
+    'Start-Process -FilePath $node -ArgumentList (\'"\' + (Join-Path $root "server.js") + \'"\') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $root "data\\server.log") -RedirectStandardError (Join-Path $root "data\\server.err.log")',
+    'Start-Sleep -Seconds 1',
+    'Remove-Item -LiteralPath $zip -Force',
+    'Remove-Item -LiteralPath $src -Recurse -Force',
+    '',
+  ].join('\r\n');
+  fs.writeFileSync(ps1, '\ufeff' + content, 'utf8');
+  return ps1;
 }
 
 const server = http.createServer((req, res) => {

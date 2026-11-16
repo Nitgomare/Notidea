@@ -103,6 +103,8 @@ for (const sql of [
   'ALTER TABLE tags ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0',
   "ALTER TABLE tags ADD COLUMN icon TEXT NOT NULL DEFAULT ''",
   'ALTER TABLE tags ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE memo_comments ADD COLUMN remind_at INTEGER',
+  'ALTER TABLE memo_comments ADD COLUMN done INTEGER NOT NULL DEFAULT 0',
 ]) {
   try { db.exec(sql); } catch { /* 已存在 */ }
 }
@@ -156,19 +158,56 @@ function hydrate(rows) {
 
 /* ---------------- 批注 ---------------- */
 function commentsOf(memoId) {
-  return db.prepare('SELECT id, memo_id, content, created_at FROM memo_comments WHERE memo_id = ? ORDER BY id ASC').all(memoId);
+  return db.prepare('SELECT id, memo_id, content, created_at, remind_at, done FROM memo_comments WHERE memo_id = ? ORDER BY id ASC').all(memoId);
+}
+function commentHit(memoId, search) {
+  if (!search) return '';
+  const row = db.prepare('SELECT content FROM memo_comments WHERE memo_id = ? AND content LIKE ? ORDER BY id ASC LIMIT 1')
+    .get(memoId, '%' + String(search) + '%');
+  return row ? row.content : '';
 }
 function commentCount(memoId) {
   return db.prepare('SELECT COUNT(*) AS n FROM memo_comments WHERE memo_id = ?').get(memoId).n;
 }
-function addComment(memoId, content) {
-  const info = db.prepare('INSERT INTO memo_comments(memo_id, content, created_at) VALUES (?, ?, ?)')
-    .run(memoId, String(content || ''), now());
-  return db.prepare('SELECT id, memo_id, content, created_at FROM memo_comments WHERE id = ?').get(Number(info.lastInsertRowid));
+function commentById(id) {
+  return db.prepare('SELECT id, memo_id, content, created_at, remind_at, done FROM memo_comments WHERE id = ?').get(id) || null;
+}
+function addComment(memoId, content, remindAt = null) {
+  const info = db.prepare('INSERT INTO memo_comments(memo_id, content, created_at, remind_at) VALUES (?, ?, ?, ?)')
+    .run(memoId, String(content || ''), now(), remindAt ? Number(remindAt) : null);
+  return commentById(Number(info.lastInsertRowid));
 }
 function deleteComment(id) {
   return db.prepare('DELETE FROM memo_comments WHERE id = ?').run(id).changes > 0;
 }
+
+// 提醒：批注里带 @日期 / @今天 / @明天 的，按时间排
+function reminders({ includeDone = false, limit = 200 } = {}) {
+  const where = includeDone ? 'c.remind_at IS NOT NULL' : 'c.remind_at IS NOT NULL AND c.done = 0';
+  return db.prepare(`
+    SELECT c.id, c.memo_id, c.content, c.created_at, c.remind_at, c.done,
+           substr(replace(m.content, char(10), ' '), 1, 80) AS memo_excerpt,
+           m.created_at AS memo_created_at
+    FROM memo_comments c JOIN memos m ON m.id = c.memo_id
+    WHERE ${where}
+    ORDER BY c.remind_at ASC, c.id ASC
+    LIMIT ?
+  `).all(limit);
+}
+
+function reminderCount() {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM memo_comments WHERE remind_at IS NOT NULL AND done = 0').get();
+  return row.n;
+}
+
+function clearReminder(id) {
+  return db.prepare('UPDATE memo_comments SET done = 1 WHERE id = ?').run(id).changes > 0;
+}
+
+function setReminder(id, ts) {
+  return db.prepare('UPDATE memo_comments SET remind_at = ?, done = 0 WHERE id = ?').run(ts ? Number(ts) : null, id).changes > 0;
+}
+
 
 /* ---------------- 附件 ---------------- */
 function filesOf(memoId) {
@@ -341,12 +380,16 @@ function listMemos({ tag = '', search = '', pin, since, until, random = false, h
     where.push(`(content LIKE '%http://%' OR content LIKE '%https://%' OR content LIKE '%[[]%')`);
   }
   if (search) {
+    // 正文和批注一起搜：正文走 FTS，批注走 LIKE
+    const like = '%' + search + '%';
     if (fts) {
-      where.push(`id IN (SELECT rowid FROM memos_fts WHERE memos_fts MATCH ?)`);
+      where.push(`(id IN (SELECT rowid FROM memos_fts WHERE memos_fts MATCH ?) OR id IN (SELECT memo_id FROM memo_comments WHERE content LIKE ?))`);
       args.push(search.replace(/["*]/g, ' ').trim() + '*');
+      args.push(like);
     } else {
-      where.push(`content LIKE ?`);
-      args.push(`%${search}%`);
+      where.push(`(content LIKE ? OR id IN (SELECT memo_id FROM memo_comments WHERE content LIKE ?))`);
+      args.push(like);
+      args.push(like);
     }
   }
   const order = random ? 'ORDER BY RANDOM()' : 'ORDER BY pinned DESC, created_at DESC';
@@ -610,5 +653,6 @@ module.exports = {
   exportAll, importAll, stats, extractTags, syncTags, importMemo,
   filesOf, addFile, attachFiles, parseLinkTargets, resolveLinkTarget, backlinksOf, forwardLinksOf, heatmap,
   relatedMemos, tokensOf,
-  commentsOf, commentCount, addComment, deleteComment,
+  commentsOf, commentCount, commentHit, commentById, addComment, deleteComment,
+  reminders, reminderCount, clearReminder, setReminder,
 };

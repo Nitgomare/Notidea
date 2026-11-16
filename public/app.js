@@ -364,11 +364,12 @@ function memoNode(m) {
   const isEdited = m.updated_at && m.updated_at - m.created_at > 60000;
   el.innerHTML =
     '<div class="memo-body">' + renderContent(m.content, state.search) + '</div>' +
+    (m.comment_hit ? '<div class="comment-hit">批注：' + escapeHtml(String(m.comment_hit).slice(0, 120)) + '</div>' : '') +
     (m.files && m.files.length ? '<div class="att-grid">' + m.files.map(fileBlock).join('') + '</div>' : '') +
     '<div class="comment-box" hidden>' +
       '<div class="comment-list"></div>' +
       '<div class="comment-input">' +
-        '<input type="text" placeholder="写一句批注…（回车发送）" maxlength="2000">' +
+        '<input type="text" placeholder="写一句批注…（回车发送；@明天 / @2026-11-20 可设提醒）" maxlength="2000">' +
         '<button class="mini-btn" data-act="comment-send">发送</button>' +
       '</div>' +
     '</div>' +
@@ -416,6 +417,57 @@ function renderStats() {
   $('#memo-count').textContent = (state.stats.total ?? 0) + ' 条 · ' + (state.stats.days ?? 0) + ' 天';
 }
 
+function fmtRemind(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (sameDay) return '今天 ' + hm;
+  const md = (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日';
+  return (d.getFullYear() !== now.getFullYear() ? d.getFullYear() + ' 年 ' : '') + md + ' ' + hm;
+}
+
+function renderReminders(nowTs) {
+  const list = $('#memo-list');
+  list.innerHTML = '';
+  const items = state.reminders || [];
+  if (!items.length) {
+    list.innerHTML = '<div class="empty"><h3>没有待办的提醒</h3><p>在批注里写 <code>@明天</code>、<code>@2026-11-20</code> 或 <code>@今晚</code>，就会出现在这里。</p></div>';
+    return;
+  }
+  for (const r of items) {
+    const overdue = r.remind_at <= (nowTs || Date.now());
+    const row = document.createElement('div');
+    row.className = 'reminder' + (overdue ? ' overdue' : '');
+    row.dataset.memo = r.memo_id;
+    row.dataset.cid = r.id;
+    row.innerHTML =
+      '<div class="reminder-when">' + (overdue ? '已到时间 · ' : '') + escapeHtml(fmtRemind(r.remind_at)) + '</div>' +
+      '<div class="reminder-text">' + escapeHtml(r.content) + '</div>' +
+      '<div class="reminder-memo">' + escapeHtml(r.memo_excerpt) + '</div>' +
+      '<div class="reminder-acts">' +
+        '<button class="mini-btn" data-remind="open">打开笔记</button>' +
+        '<button class="mini-btn" data-remind="done">标记完成</button>' +
+      '</div>';
+    list.appendChild(row);
+  }
+}
+
+/* 提醒列表的按钮 */
+$('#memo-list').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('[data-remind]');
+  if (!btn) return;
+  const row = ev.target.closest('.reminder');
+  if (!row) return;
+  if (btn.dataset.remind === 'done') {
+    await api('/api/comments/' + row.dataset.cid + '/done', { method: 'POST' });
+    toast('已标记完成');
+    await loadMemos();
+    return;
+  }
+  location.href = '/?memo=' + row.dataset.memo;
+});
+
 function renderListTitle() {
   const f = state.filter;
   const hasLabel = { notags: '无标签', images: '有图片', videos: '有视频', audio: '有语音', links: '有链接' }[state.has];
@@ -424,6 +476,7 @@ function renderListTitle() {
     : f.type === 'tag' ? '#' + f.value
     : f.type === 'today' ? '今日'
     : f.type === 'pinned' ? '置顶笔记'
+    : f.type === 'reminders' ? '提醒'
     : f.type === 'random' ? '随机漫步'
     : '全部笔记';
   $('#list-title').textContent = title;
@@ -435,8 +488,16 @@ function renderListTitle() {
 
 /* ---------------- 数据加载 ---------------- */
 async function loadMemos({ append = false } = {}) {
-  const q = new URLSearchParams({ limit: state.limit, offset: append ? state.offset : 0 });
   const f = state.filter;
+  if (f.type === 'reminders') {
+    const data = await api('/api/reminders');
+    state.reminders = data.reminders || [];
+    $('#stat-reminders').textContent = data.count || 0;
+    renderReminders(data.now);
+    renderListTitle();
+    return;
+  }
+  const q = new URLSearchParams({ limit: state.limit, offset: append ? state.offset : 0 });
   if (f.type === 'tag') q.set('tag', f.value);
   if (f.type === 'day' && f.value) {
     const [yy, mm, dd] = f.value.split('-').map(Number);
@@ -474,6 +535,7 @@ async function refreshBootstrap() {
   renderHeatmap();
   renderTags();
   $('#db-path').textContent = b.storage.path;
+  if (b.reminders !== undefined) $('#stat-reminders').textContent = b.reminders;
 }
 
 async function setFilter(f) {
@@ -608,12 +670,7 @@ async function memoAction(act, card) {
   }
 
   if (act === 'share') {
-    const text = memo.content + '\n\n' + new Date(memo.created_at).toLocaleString();
-    if (navigator.share) {
-      try { await navigator.share({ title: '一条笔记', text }); return; } catch (e) { /* 用户取消，回落到复制 */ }
-    }
-    await copyText(text);
-    toast('分享文本已复制');
+    openShare(memo);
     return;
   }
 
@@ -961,24 +1018,65 @@ $('#btn-settings').onclick = async () => {
 $('#btn-check-update').onclick = async () => {
   const note = $('#update-note');
   note.textContent = '正在检查…';
+  $('#btn-do-update').hidden = true;
   try {
     const r = await api('/api/update/check?force=1');
     if (r.error) { note.textContent = '检查失败：' + r.error + '（离线也能正常用）'; return; }
     if (r.hasUpdate) {
-      note.innerHTML = '';
-      note.append('发现新版本 v' + r.latest + ' ');
-      const a = document.createElement('a');
-      a.href = r.url;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.textContent = '去下载 →';
-      note.append(a);
-      if (r.notes) note.append(document.createElement('br'), r.notes);
+      note.textContent = '发现新版本 v' + r.latest + (r.notes ? '：' + r.notes : '');
+      $('#btn-do-update').hidden = false;
+      $('#btn-do-update').textContent = '下载并安装 v' + r.latest;
     } else {
       note.textContent = '已是最新版本（v' + r.current + '）';
     }
   } catch (e) {
     note.textContent = '检查失败：' + e.message;
+  }
+};
+
+$('#btn-do-update').onclick = async () => {
+  const note = $('#update-note');
+  const btn = $('#btn-do-update');
+  btn.disabled = true;
+  note.textContent = '正在下载并安装…装好后窗口会自动刷新，请不要关掉它';
+  try {
+    const r = await api('/api/update/apply', { method: 'POST' });
+    if (r.error) { note.textContent = '更新失败：' + r.error; btn.disabled = false; return; }
+    note.textContent = '已下载 v' + r.latest + '（' + Math.round((r.size || 0) / 1024) + ' KB），正在重启服务…';
+    // 等服务重启后自己刷新
+    const want = r.latest;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries += 1;
+      try {
+        const v = await fetch('/api/version', { cache: 'no-store' }).then((x) => x.json());
+        if (v && v.version === want) {
+          clearInterval(timer);
+          note.textContent = '已更新到 v' + want + '，正在刷新…';
+          setTimeout(() => location.reload(), 600);
+          return;
+        }
+      } catch (e) { /* 服务正在重启 */ }
+      if (tries > 90) {
+        clearInterval(timer);
+        note.textContent = '服务没有自己起来，请手动关掉窗口后重新双击 start-desktop.cmd（数据没动）';
+        btn.disabled = false;
+      }
+    }, 1000);
+  } catch (e) {
+    note.textContent = '更新失败：' + e.message;
+    btn.disabled = false;
+  }
+};
+
+$('#btn-shortcut').onclick = async () => {
+  const note = $('#shortcut-note');
+  note.textContent = '正在创建…';
+  try {
+    const r = await api('/api/shortcut', { method: 'POST' });
+    note.textContent = '已创建：' + r.path;
+  } catch (e) {
+    note.textContent = '创建失败：' + e.message + '（也可以双击包里的 创建桌面快捷方式.cmd）';
   }
 };
 $('#btn-cfg-save').onclick = async () => {
@@ -1345,13 +1443,17 @@ async function loadComments(card) {
 
 function renderComments(list, comments) {
   if (!comments.length) { list.innerHTML = '<span class="muted small">还没有批注</span>'; return; }
-  list.innerHTML = comments.map((c) =>
-    '<div class="comment-item" data-cid="' + c.id + '">' +
+  list.innerHTML = comments.map((c) => {
+    const when = c.remind_at && !c.done
+      ? '<span class="comment-remind" title="提醒时间">⏰ ' + escapeHtml(fmtRemind(c.remind_at)) + '</span>'
+      : (c.remind_at && c.done ? '<span class="comment-remind done">⏰ 已完成</span>' : '');
+    return '<div class="comment-item" data-cid="' + c.id + '">' +
+      when +
       '<span class="comment-text">' + escapeHtml(c.content) + '</span>' +
       '<span class="comment-time muted small">' + fmtTime(c.created_at) + '</span>' +
       '<button class="comment-del" title="删除批注">✕</button>' +
-    '</div>'
-  ).join('');
+    '</div>';
+  }).join('');
   list.querySelectorAll('.comment-del').forEach((b) => {
     b.onclick = async (ev) => {
       const item = ev.target.closest('.comment-item');
@@ -1407,3 +1509,189 @@ async function openFromQuery() {
     toast('打开失败：' + e.message);
   }
 }
+
+/* ---------------- 分享长图（纯 canvas，本地生成） ---------------- */
+const SHARE_W = 1080;
+const SHARE_H = 1440;
+
+function wrapLines(ctx, text, maxWidth) {
+  const out = [];
+  const paras = String(text || '').split(/\r?\n/);
+  for (const para of paras) {
+    if (!para.trim()) { out.push(''); continue; }
+    let line = '';
+    for (const ch of para) {
+      const next = line + ch;
+      if (ctx.measureText(next).width > maxWidth && line) {
+        out.push(line);
+        line = ch;
+      } else {
+        line = next;
+      }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+async function openShare(memo) {
+  const dlg = $('#share');
+  const canvas = $('#share-canvas');
+  const measure = document.createElement('canvas').getContext('2d');
+  const FONT_BODY = '40px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+  const LINE_H = 62;
+
+  measure.font = FONT_BODY;
+  const lines = wrapLines(measure, memo.content, SHARE_W - 2 * 96);
+
+  const imgMeta = (memo.files || []).find((f) => (f.mime || '').startsWith('image/'));
+  let img = null;
+  let imgW = 0;
+  let imgH = 0;
+  if (imgMeta) {
+    try {
+      img = await loadImage(imgMeta.url);
+      const maxW = SHARE_W - 2 * 96;
+      const maxH = 520;
+      const scale = Math.min(maxW / img.width, maxH / img.height);
+      imgW = Math.round(img.width * scale);
+      imgH = Math.round(img.height * scale);
+    } catch (e) { img = null; imgW = 0; imgH = 0; }
+  }
+
+  const headerH = 190;
+  const bodyH = lines.length * LINE_H + 40;
+  const imgBlock = img ? imgH + 54 : 0;
+  const tagsH = (memo.tags && memo.tags.length) ? 90 : 40;
+  const footerH = 120;
+  const height = Math.max(1080, Math.min(1600, headerH + imgBlock + bodyH + tagsH + footerH));
+  canvas.width = SHARE_W;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#f7f4ee';
+  ctx.fillRect(0, 0, SHARE_W, height);
+  ctx.strokeStyle = 'rgba(35,32,28,0.10)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(28, 28, SHARE_W - 56, height - 56);
+
+  const d = new Date(memo.created_at);
+  ctx.fillStyle = '#1f6f4a';
+  ctx.beginPath(); ctx.arc(96, 108, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f7f4ee';
+  ctx.font = 'bold 26px Georgia, "Times New Roman", serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('f', 96, 118);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#23201c';
+  ctx.font = '600 30px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+  ctx.fillText('flomo local', 134, 118);
+
+  ctx.fillStyle = '#8b8580';
+  ctx.font = '26px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const dateText = d.getFullYear() + '.' + pad2(d.getMonth() + 1) + '.' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  ctx.textAlign = 'right';
+  ctx.fillText(dateText, SHARE_W - 96, 118);
+  ctx.textAlign = 'left';
+
+  let y = headerH;
+  if (img) {
+    ctx.save();
+    roundRect(ctx, 96, y, imgW, imgH, 18);
+    ctx.clip();
+    ctx.drawImage(img, 96, y, imgW, imgH);
+    ctx.restore();
+    y += imgH + 54;
+  }
+
+  ctx.fillStyle = '#23201c';
+  ctx.font = FONT_BODY;
+  let ty = y + 46;
+  const maxLines = Math.max(1, Math.floor((height - footerH - 40 - ty) / LINE_H));
+  const shown = lines.slice(0, maxLines);
+  if (lines.length > shown.length && shown.length) {
+    shown[shown.length - 1] = shown[shown.length - 1].replace(/.{2}$/, '') + '…';
+  }
+  for (const line of shown) {
+    ctx.fillText(line, 96, ty);
+    ty += LINE_H;
+  }
+
+  const tags = memo.tags || [];
+  if (tags.length) {
+    let tx = 96;
+    const tagY = height - 150;
+    ctx.font = '28px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+    for (const t of tags.slice(0, 6)) {
+      const label = '#' + t;
+      const w = ctx.measureText(label).width + 34;
+      if (tx + w > SHARE_W - 96) break;
+      ctx.fillStyle = 'rgba(31,111,74,0.10)';
+      roundRect(ctx, tx, tagY - 34, w, 48, 24);
+      ctx.fill();
+      ctx.fillStyle = '#1f6f4a';
+      ctx.fillText(label, tx + 17, tagY);
+      tx += w + 14;
+    }
+  }
+
+  ctx.fillStyle = '#8b8580';
+  ctx.font = '24px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+  ctx.fillText('写于 flomo local · 数据都在自己电脑里', 96, height - 84);
+
+  $('#share-hint').textContent = '长图适合发朋友圈；图片只在本机生成，不会上传。';
+  dlg.showModal();
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error('图片加载失败'));
+    im.src = src;
+  });
+}
+
+async function canvasBlob() {
+  const canvas = $('#share-canvas');
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const dlg = $('#share');
+  if (!dlg) return;
+  $('#btn-share-close').onclick = () => dlg.close();
+  $('#btn-share-save').onclick = async () => {
+    const blob = await canvasBlob();
+    if (!blob) return toast('生成失败');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'flomo-local-' + Date.now() + '.png';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('已保存');
+  };
+  $('#btn-share-copy').onclick = async () => {
+    try {
+      const blob = await canvasBlob();
+      if (!blob) throw new Error('生成失败');
+      if (!navigator.clipboard || !window.ClipboardItem) throw new Error('浏览器不支持复制图片');
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      toast('图片已复制');
+    } catch (e) {
+      toast('这个环境不能复制图片，请用「保存图片」');
+    }
+  };
+});

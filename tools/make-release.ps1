@@ -60,4 +60,18 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Compression
 
 $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 Write-Output ('release zip : ' + $zip + ' (' + $mb + ' MB)')
+
+# 7) 自动更新用的「程序包」：内容相同但不带 runtime，客户端下载后覆盖程序文件、保留 data 与 runtime
+$appStage = Join-Path $dist ('.app-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+New-Item -ItemType Directory -Path $appStage -Force | Out-Null
+Copy-Item -Path (Join-Path $stage '*') -Destination $appStage -Recurse -Force
+$runtimeDir = Join-Path $appStage 'runtime'
+if (Test-Path $runtimeDir) { Remove-Item $runtimeDir -Recurse -Force }
+$appZip = Join-Path $dist ('flomo-local-' + $Version + '-app.zip')
+if (Test-Path $appZip) { Remove-Item $appZip -Force }
+Compress-Archive -Path (Join-Path $appStage '*') -DestinationPath $appZip -CompressionLevel Optimal
+$appKb = [math]::Round((Get-Item $appZip).Length / 1KB, 0)
+Write-Output ('app  zip   : ' + $appZip + ' (' + $appKb + ' KB, 自动更新用)')
+try { Remove-Item $appStage -Recurse -Force -ErrorAction Stop } catch { }
+
 try { Remove-Item $stage -Recurse -Force -ErrorAction Stop } catch { Write-Output ('note: 暂存目录没删掉（句柄被占），可重启后再删：' + $stage) }

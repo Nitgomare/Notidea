@@ -316,18 +316,20 @@ mark { background: #f6e3a8; color: inherit; padding: 0 1px; border-radius: 3px; 
   border: 1px solid var(--line); border-radius: 16px; padding: 0;
   background: var(--paper-2); color: var(--ink);
   box-shadow: 0 24px 70px rgba(35, 32, 28, 0.22);
-  max-width: 92vw;
+  max-width: 92vw; max-height: 95vh;
+  display: flex; flex-direction: column;
 }
 .dialog::backdrop { background: rgba(40, 34, 26, 0.42); backdrop-filter: blur(2px); }
-.dialog-body { padding: 22px 24px 18px; display: flex; flex-direction: column; gap: 10px; }
-.dialog h3 { margin: 0 0 4px; font-family: Georgia, "Songti SC", serif; font-size: 18px; font-weight: 600; }
+.dialog-body { padding: 16px 24px 14px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
+.dialog h3 { margin: 0 0 2px; font-family: Georgia, "Songti SC", serif; font-size: 18px; font-weight: 600; }
 .dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .dialog input, .dialog select {
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
   font-size: 13.5px; color: var(--ink); background: #fff;
 }
 .dialog input:focus, .dialog select:focus { outline: none; border-color: var(--accent); }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.field-row { display: grid; grid-template-columns: 1fr 120px; gap: 10px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 #settings, #tag-edit { width: min(420px, 92vw); }
 
 /* 洞察弹窗 */
@@ -544,3 +546,47 @@ body.float-mode { background: #efe9df; }
 body.float-mode .main { max-width: 100%; padding: 14px 14px 20px; }
 body.float-mode .memo { box-shadow: 0 6px 22px rgba(35, 32, 28, 0.10); }
 body.float-mode #list-title { font-size: 15px; }
+
+/* 提醒列表 */
+.reminder {
+  background: #fffdf9;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(35, 32, 28, 0.04);
+}
+.reminder.overdue { border-left: 3px solid #c0563f; }
+.reminder-when { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+.reminder.overdue .reminder-when { color: #c0563f; }
+.reminder-text { font-size: 15px; color: var(--ink); margin-bottom: 6px; white-space: pre-wrap; }
+.reminder-memo {
+  font-size: 12.5px; color: var(--muted);
+  background: rgba(35, 32, 28, 0.035);
+  border-radius: 8px; padding: 6px 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.reminder-acts { display: flex; gap: 8px; margin-top: 10px; }
+
+/* 批注上的提醒标记 / 搜索命中批注 */
+.comment-remind {
+  font-size: 11px; color: var(--accent); background: rgba(31, 111, 74, 0.1);
+  border-radius: 20px; padding: 1px 8px; margin-right: 6px; white-space: nowrap;
+}
+.comment-remind.done { color: var(--muted); background: rgba(35, 32, 28, 0.06); }
+.comment-hit {
+  margin-top: 6px; font-size: 12.5px; color: #7a6a3f;
+  background: #fbf6e9; border-radius: 8px; padding: 6px 10px;
+}
+
+/* 分享长图 */
+.share-dialog { width: min(600px, 94vw); }
+.share-stage {
+  display: flex; justify-content: center; align-items: center;
+  background: rgba(35, 32, 28, 0.04); border-radius: 12px; padding: 10px;
+  max-height: 56vh; overflow: auto;
+}
+.share-stage canvas {
+  height: min(60vh, 560px); width: auto; max-width: 100%; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(35, 32, 28, 0.16);
+}

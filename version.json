@@ -1,6 +1,6 @@
 {
-  "version": "1.2.1",
-  "notes": "新增「创建桌面快捷方式.cmd」：可自选保存位置（默认桌面），默认打开桌面版独立窗口",
+  "version": "1.2.2",
+  "notes": "批注 @提醒 与提醒列表、批注搜索、分享长图、一键自动更新（不用手动下载）、设置里创建桌面快捷方式",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }
