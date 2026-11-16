@@ -355,9 +355,11 @@ function buildVars(kind, body) {
     return { memos: memos.length ? memoLines(memos, true) : '（还没有笔记）' };
   }
   if (kind === 'tag-suggest') {
-    const memo = dbm.getMemo(Number(body.memoId));
-    if (!memo) throw new Error('笔记不存在');
-    return { content: memo.content, tags: dbm.listTags().slice(0, 40).map((t) => '#' + t.name).join(' ') || '（暂无）' };
+    // 草稿还没保存，前端只传 content；兼容旧的 memoId 调用
+    const memo = body.memoId ? dbm.getMemo(Number(body.memoId)) : null;
+    const content = String(body.content || (memo && memo.content) || '').trim();
+    if (!content) throw new Error('笔记内容为空');
+    return { content, tags: dbm.listTags().slice(0, 40).map((t) => '#' + t.name).join(' ') || '（暂无）' };
   }
   if (kind === 'weekly-summary') {
     const memos = dbm.memosBetween(dayStart(-7), dayStart(1));
@@ -863,12 +865,20 @@ function writeApplyScript(zipPath) {
     '}',
     'for ($i = 0; $i -lt 120; $i++) { if (Port-Free) { break }; Start-Sleep -Milliseconds 250 }',
     'Start-Sleep -Milliseconds 400',
-    'Expand-Archive -LiteralPath $zip -DestinationPath $src -Force',
+    '$log = Join-Path $root "data\\update\\apply.log"',
+    'function Say($m) { try { Add-Content -LiteralPath $log -Value (("[{0}] " -f (Get-Date -Format "HH:mm:ss")) + $m) -Encoding UTF8 } catch {} }',
+    'Say ("apply start: " + $zip)',
+    'if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Recurse -Force }',
+    // 不用 Expand-Archive：PowerShell 5.1 会从 PSModulePath 里加载到 PowerShell 7 的 Archive 模块，
+    // 在 .NET Framework 下抛 "找不到 ExtractToDirectory 的重载"，解压会静默失败。
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+    'try { [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $src); Say "extract ok" } catch { Say ("extract FAILED: " + $_.Exception.Message) }',
     'robocopy $src $root /E /NFL /NDL /NJH /NJS /XD "$root\\data" "$root\\runtime" | Out-Null',
+    'Say ("robocopy exit=" + $LASTEXITCODE)',
     'Start-Process -FilePath $node -ArgumentList (\'"\' + (Join-Path $root "server.js") + \'"\') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $root "data\\server.log") -RedirectStandardError (Join-Path $root "data\\server.err.log")',
     'Start-Sleep -Seconds 1',
-    'Remove-Item -LiteralPath $zip -Force',
-    'Remove-Item -LiteralPath $src -Recurse -Force',
+    'Say ("done, version.json = " + ((Get-Content -LiteralPath (Join-Path $root "version.json") -Raw) -replace "`r?`n", " "))',
+    'if (Test-Path -LiteralPath (Join-Path $src "server.js")) { Remove-Item -LiteralPath $src -Recurse -Force; Remove-Item -LiteralPath $zip -Force } else { Say "zip kept: extract failed" }',
     "$vbsSelf = Join-Path (Split-Path -Parent $PSCommandPath) 'apply.vbs'",
     'Remove-Item -LiteralPath $vbsSelf -Force',
     'Remove-Item -LiteralPath $PSCommandPath -Force',

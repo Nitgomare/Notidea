@@ -1,6 +1,6 @@
 {
-  "version": "1.2.5",
-  "notes": "检查更新改走 GitHub API（绕开 raw 的 CDN 缓存），jsDelivr 兜底；版本号实时读磁盘；检查结果缓存 10 分钟→1 分钟",
+  "version": "1.3.1",
+  "notes": "修复 # 标签按钮插入多余空格导致标签识别不出；修复「让 AI 建议标签」不可用（服务端改为接收草稿正文）；含 1.3.0 的顶栏/输入框常驻、单条洞察与自动更新修复",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }
