@@ -32,7 +32,8 @@ const state = {
   aiSkill: 'daily-review',
   aiText: '',
   heatMonth: null,
-  subnavOpen: localStorage.getItem('subnavOpen') !== '0',
+  // 默认折叠；只有用户明确展开过（存了 '1'）才展开
+  subnavOpen: localStorage.getItem('subnavOpen') === '1',
 };
 
 let toastTimer;
