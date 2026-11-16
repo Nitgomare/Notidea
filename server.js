@@ -52,10 +52,72 @@ const tagState = () => ({ tags: dbm.listTags(), tagTree: dbm.tagTree() });
 
 /* ---------------- 批注里的 @提醒 ---------------- */
 function atNine(d) { const x = new Date(d); x.setHours(9, 0, 0, 0); return x.getTime(); }
+
+/* 从 @ 之后的文字里取时刻：19:30、7点、七点半、下午3点、晚上8点15分 */
+const CN_NUM = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+function cnToInt(t) {
+  if (/^\d+$/.test(t)) return Number(t);
+  if (t === '十') return 10;
+  if (t.length === 2 && t[0] === '十') return 10 + (CN_NUM[t[1]] ?? 0);
+  if (t.length === 2 && t[1] === '十') return (CN_NUM[t[0]] ?? 0) * 10;
+  if (t.length === 3 && t[1] === '十') return (CN_NUM[t[0]] ?? 0) * 10 + (CN_NUM[t[2]] ?? 0);
+  return CN_NUM[t] ?? NaN;
+}
+function parseClock(s) {
+  let m = s.match(/(\d{1,2})[:：](\d{2})/);
+  let h, min = 0;
+  if (m) { h = Number(m[1]); min = Number(m[2]); }
+  else {
+    m = s.match(/([0-9零〇一二两三四五六七八九十]{1,3})\s*[点时](半|一刻|三刻|([0-9零〇一二两三四五六七八九十]{1,3})\s*分?)?/);
+    if (!m) return null;
+    h = cnToInt(m[1]);
+    if (m[2] === '半') min = 30;
+    else if (m[2] === '一刻') min = 15;
+    else if (m[2] === '三刻') min = 45;
+    else if (m[3]) min = cnToInt(m[3]);
+  }
+  if (!Number.isFinite(h) || h > 24 || !Number.isFinite(min) || min > 59) return null;
+  const before = s.slice(0, m.index);
+  if (/(下午|晚上|傍晚|今晚|明晚|夜里|晚)/.test(before) && h < 12) h += 12;
+  if (/中午/.test(before) && h < 11) h += 12;
+  if (h === 24) h = 0;
+  return { h, min };
+}
+function withClock(ts, s) {
+  const c = parseClock(s);
+  if (!c) return ts;
+  const d = new Date(ts); d.setHours(c.h, c.min, 0, 0);
+  return d.getTime();
+}
+
 function parseRemind(text) {
+  const s = String(text || '');
+  const at = s.indexOf('@');
+  if (at === -1) return null;
+  const tail = s.slice(at); // 时刻只从 @ 之后找，避免误读正文里的数字
+  const ts = parseRemindDay(s);
+  if (ts == null) {
+    // 只写了时刻（@七点 / @19:30）：今天这个点，已过就算明天
+    const c = parseClock(tail.slice(1, 16));
+    if (!c) return null;
+    const d = new Date(); d.setHours(c.h, c.min, 0, 0);
+    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  return withClock(ts, tail.slice(1, 24));
+}
+
+function parseRemindDay(text) {
   const s = String(text || '');
   let m = s.match(/@(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 9, 0, 0, 0).getTime();
+  m = s.match(/@(\d{1,2})月(\d{1,2})[日号]/);
+  if (m) {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]), 9, 0, 0, 0);
+    if (d.getTime() < now.getTime() - 86400000) d.setFullYear(d.getFullYear() + 1);
+    return d.getTime();
+  }
   m = s.match(/@(今天晚上|今晚|今天|明天晚上|明晚|明天|后天|下周[一二三四五六日天]?|下个月)/);
   if (m) {
     const base = new Date();
@@ -78,6 +140,56 @@ function parseRemind(text) {
   }
   if (/@提醒/.test(s)) { const d = new Date(); d.setHours(20, 0, 0, 0); return d.getTime(); }
   return null;
+}
+
+/* ---------------- 提醒 → iCalendar(.ics) ---------------- */
+function icsTime(ms) {
+  const d = new Date(ms);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return d.getUTCFullYear() + p2(d.getUTCMonth() + 1) + p2(d.getUTCDate()) + 'T' + p2(d.getUTCHours()) + p2(d.getUTCMinutes()) + p2(d.getUTCSeconds()) + 'Z';
+}
+function icsText(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+// RFC 5545：每行不超过 75 字节，续行以一个空格开头；按字符切，不拆开 UTF-8 多字节字符
+function foldIcsLine(line) {
+  const out = [];
+  let cur = '', bytes = 0;
+  for (const ch of line) {
+    const b = Buffer.byteLength(ch, 'utf8');
+    const limit = out.length ? 74 : 75;
+    if (bytes + b > limit) { out.push(cur); cur = ''; bytes = 0; }
+    cur += ch; bytes += b;
+  }
+  out.push(cur);
+  return out.join('\r\n ');
+}
+function buildIcs(items) {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//flomo local//CN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  for (const it of items) {
+    const title = String(it.content || '提醒').replace(/@\S+/g, '').trim() || '提醒';
+    lines.push(
+      'BEGIN:VEVENT',
+      'UID:flomo-local-remind-' + it.id + '@127.0.0.1',
+      'DTSTAMP:' + icsTime(Date.now()),
+      'DTSTART:' + icsTime(it.remind_at),
+      'DTEND:' + icsTime(it.remind_at + 30 * 60000),
+      'SUMMARY:' + icsText('flomo · ' + title.slice(0, 60)),
+      'DESCRIPTION:' + icsText(it.excerpt || ''),
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title.slice(0, 60)), 'TRIGGER:-PT0M', 'END:VALARM',
+      'END:VEVENT',
+    );
+  }
+  lines.push('END:VCALENDAR');
+  return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+}
+function writeIcs(c, memo) {
+  const dir = path.join(__dirname, 'data', 'calendar');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'remind-' + c.id + '.ics');
+  const excerpt = memo ? String(memo.content || '').replace(/\s+/g, ' ').slice(0, 200) : '';
+  fs.writeFileSync(file, buildIcs([{ id: c.id, remind_at: c.remind_at, content: c.content, excerpt }]), 'utf8');
+  return file;
 }
 
 /* ---------------- 在真正的桌面建快捷方式（设置里的按钮） ---------------- */
@@ -404,6 +516,16 @@ async function route(req, res) {
         for (const f of body.files) saved.push(saveUpload(f));
         dbm.attachFiles(memo.id, saved);
       }
+      // 写笔记时直接设提醒：挂一条带 remind_at 的批注，复用提醒列表
+      if (body.remindAt && Number(body.remindAt) > 0) {
+        const c = dbm.addComment(memo.id, String(body.remindNote || '⏰ 提醒').slice(0, 200), Number(body.remindAt));
+        if (body.calendar && c) {
+          try {
+            const file = writeIcs(c, dbm.getMemo(memo.id));
+            spawn('cmd.exe', ['/c', 'start', '""', file], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+          } catch (e) { /* 日历打不开不影响保存 */ }
+        }
+      }
       const full = dbm.getMemo(memo.id);
       return json(res, 200, { memo: full, stats: dbm.stats(), tags: dbm.listTags(), tagTree: dbm.tagTree(), heatmap: dbm.heatmap(154) });
     }
@@ -518,6 +640,27 @@ async function route(req, res) {
         count: dbm.reminderCount(),
         now: Date.now(),
       });
+    }
+
+    // 同步到 Windows 日历：生成标准 .ics，交给系统默认日历程序（Windows 日历 / Outlook）打开
+    const icsMatch = p.match(/^\/api\/comments\/(\d+)\/calendar$/);
+    if (icsMatch && req.method === 'POST') {
+      const c = dbm.commentById(Number(icsMatch[1]));
+      if (!c || !c.remind_at) return json(res, 404, { error: '这条批注没有提醒时间' });
+      const memo = dbm.getMemo(c.memo_id);
+      const file = writeIcs(c, memo);
+      try {
+        spawn('cmd.exe', ['/c', 'start', '""', file], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+        return json(res, 200, { ok: true, file });
+      } catch (e) { return json(res, 500, { error: '打不开日历：' + e.message, file }); }
+    }
+    if (p === '/api/reminders.ics' && req.method === 'GET') {
+      const list = dbm.reminders({ includeDone: false });
+      res.writeHead(200, {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="flomo-local-reminders.ics"',
+      });
+      return res.end(buildIcs(list.map((r) => ({ id: r.id, remind_at: r.remind_at, content: r.content, excerpt: r.memo_excerpt }))));
     }
 
     if (p.startsWith('/api/comments/') && p.endsWith('/done') && req.method === 'POST') {
@@ -753,3 +896,13 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`\n  flomo-local 已启动  →  http://${HOST}:${PORT}\n  数据目录: ${path.join(__dirname, 'data')}\n`);
 });
+
+// 自检：程序文件被删 / 被移走时主动退出，避免“页面能开、接口全挂”的僵尸服务占着端口
+const SELF_FILES = [__filename, path.join(PUBLIC_DIR, 'index.html'), path.join(__dirname, 'prompts')];
+setInterval(() => {
+  const missing = SELF_FILES.filter((f) => !fs.existsSync(f));
+  if (missing.length) {
+    console.error('[flomo-local] 程序文件缺失，服务退出：' + missing.join(', '));
+    process.exit(3);
+  }
+}, 10000).unref();

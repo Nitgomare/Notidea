@@ -1358,13 +1358,49 @@ body.select-mode .memo-actions, body.select-mode .ai-fab { visibility: hidden; }
 }
 .search-wrap .f-dates input:focus { box-shadow: none; background: rgba(91, 76, 245, .06); }
 
-/* 搜索图标：改用内联 SVG，避免伪元素在新高度下错位 */
+/* 搜索图标：只作用于主搜索框，四个背景属性在常态和聚焦态都写全，避免被 background 简写重置成平铺 */
 .search-wrap::before, .search-wrap::after { display: none !important; }
-.search-wrap input {
+#search, #search:focus {
   padding-left: 36px !important;
+  background-color: rgba(255, 255, 255, .85);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='9' cy='9' r='5.5' fill='none' stroke='%238e8ea3' stroke-width='1.7'/%3E%3Cpath d='M13.2 13.2L17 17' stroke='%238e8ea3' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: 12px 50%; background-size: 16px 16px;
+  background-repeat: no-repeat !important; background-position: 12px 50% !important; background-size: 16px 16px !important;
 }
-.search-wrap input:focus {
+#search:focus {
+  background-color: #fff;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='9' cy='9' r='5.5' fill='none' stroke='%235b4cf5' stroke-width='1.7'/%3E%3Cpath d='M13.2 13.2L17 17' stroke='%235b4cf5' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
 }
+.search-wrap .f-dates input, .search-wrap .f-dates input:focus { background-image: none !important; padding-left: 2px !important; }
+/* 热力图气泡挂在 body 上，层级高于所有面板 */
+.heat-tip { z-index: 200; }
+.heat-tip i { display: none; }
+
+/* 弹窗兜底（见故障报告 10.1）：关闭的弹窗一定不渲染；遮罩不用 backdrop-filter，避免部分 Edge 点击命中错位 */
+.dialog:not([open]) { display: none !important; }
+.dialog::backdrop { backdrop-filter: none !important; }
+
+/* 写笔记时设提醒 */
+.remind-pop { left: auto; right: 16px; bottom: 54px; width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 12px; transform-origin: bottom right; z-index: 95; }
+.remind-pop:not([hidden]) { display: flex; }
+.remind-quick { grid-template-columns: repeat(3, 1fr); }
+#remind-at { border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; font-size: 13px; background: #fff; color: var(--ink); }
+#remind-at:focus { outline: none; border-color: rgba(91, 76, 245, .5); box-shadow: 0 0 0 3px rgba(91, 76, 245, .12); }
+.remind-cal { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.remind-cal input { accent-color: var(--accent); }
+.remind-acts { display: flex; justify-content: flex-end; }
+.remind-chip {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 4px 2px 10px;
+  font-size: 12px; color: var(--accent-ink); background: var(--accent-soft); border-radius: 20px; white-space: nowrap;
+}
+.remind-chip.pop-in { animation: pop .35s var(--spring); }
+.remind-chip button { border: 0; background: transparent; color: var(--muted); width: 18px; height: 18px; border-radius: 50%; font-size: 10px; line-height: 1; }
+.remind-chip button:hover { background: rgba(229, 72, 77, .12); color: var(--danger); }
+#btn-remind.on { color: var(--accent); background: var(--accent-soft); }
+
+/* 提醒弹层向下展开，避免顶部被主区裁切；气泡永远在最上层 */
+.remind-pop { top: calc(100% - 44px); bottom: auto; transform-origin: top right; }
+.heat-tip { z-index: 1000 !important; }
+/* 输入框里的弹层（提醒 / @ 引用）要盖住下面的卡片：卡片带动画会各自建层叠上下文 */
+.composer { z-index: 40; }
+.composer:focus-within, .composer:has(.pop:not([hidden])) { z-index: 45; }
+.topbar { position: relative; z-index: 50; }

@@ -33,7 +33,7 @@ const state = {
   aiText: '',
   heatMonth: null,
   // 默认折叠；只有用户明确展开过（存了 '1'）才展开
-  subnavOpen: localStorage.getItem('subnavOpen') === '1',
+  subnavOpen: false, // 每次启动默认收起
   // 视图：排序 / 来源 / 搜索筛选
   view: { order: '', source: '', since: 0, until: 0, range: '', tagMode: '', tag: '', fhas: [], onThisDay: false },
   selecting: false,
@@ -119,7 +119,7 @@ function heatMonthStart() {
 
 function showHeatTip(cell, x, y) {
   const tip = $('#heat-tip');
-  tip.innerHTML = '<b>' + cell.n + '</b> 条笔记 · ' + cell.label + '<i>点击查看当天</i>';
+  tip.innerHTML = '<b>' + cell.n + '</b> 条笔记 · ' + cell.label;
   tip.hidden = false;
   const rect = tip.getBoundingClientRect();
   const left = Math.min(Math.max(8, x - rect.width / 2), window.innerWidth - rect.width - 8);
@@ -527,6 +527,7 @@ function renderReminders(nowTs) {
       '<div class="reminder-acts">' +
         '<button class="mini-btn" data-remind="open">打开笔记</button>' +
         '<button class="mini-btn" data-remind="done">标记完成</button>' +
+        '<button class="mini-btn" data-remind="calendar">加入 Windows 日历</button>' +
       '</div>';
     list.appendChild(row);
   }
@@ -542,6 +543,13 @@ $('#memo-list').addEventListener('click', async (ev) => {
     await api('/api/comments/' + row.dataset.cid + '/done', { method: 'POST' });
     toast('已标记完成');
     await loadMemos();
+    return;
+  }
+  if (btn.dataset.remind === 'calendar') {
+    try {
+      await api('/api/comments/' + row.dataset.cid + '/calendar', { method: 'POST' });
+      toast('已交给 Windows 日历，在弹出的窗口里点“保存”即可');
+    } catch (e) { toast('加入日历失败：' + e.message); }
     return;
   }
   location.href = '/?memo=' + row.dataset.memo;
@@ -867,7 +875,15 @@ async function saveMemo() {
   if (!content && !state.pendingFiles.length) { toast('写点什么再保存'); return; }
   const body = { content: content || '（附件）' };
   if (state.pendingFiles.length) body.files = state.pendingFiles.map(({ name, mime, dataBase64 }) => ({ name, mime, dataBase64 }));
+  if (draftRemind.at) {
+    body.remindAt = draftRemind.at;
+    body.calendar = draftRemind.calendar;
+    body.remindNote = '⏰ ' + (content.replace(/\s+/g, ' ').slice(0, 40) || '提醒');
+  }
   const { memo, stats, tags, tagTree, heatmap } = await api('/api/memos', { method: 'POST', body });
+  const hadRemind = !!draftRemind.at;
+  setDraftRemind(0, false);
+  if (hadRemind) refreshReminderCount();
   draft.value = '';
   state.pendingFiles = [];
   renderPending();
@@ -972,7 +988,6 @@ $('#subnav-toggle').addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
   state.subnavOpen = !state.subnavOpen;
-  localStorage.setItem('subnavOpen', state.subnavOpen ? '1' : '0');
   applySubnav();
 });
 $('#nav-all').addEventListener('click', (e) => { e.preventDefault(); });
@@ -1470,12 +1485,9 @@ function ensureMemoMenu() {
     '<button data-menu="edit">编辑</button>' +
     '<button data-menu="copy">复制</button>' +
     '<div class="menu-sep"></div>' +
-    '<button data-menu="open-window">新窗口打开</button>' +
     '<button data-menu="pin">置顶</button>' +
-    '<button data-menu="float">加入浮窗</button>' +
     '<button data-menu="insight">AI 洞察</button>' +
     '<button data-menu="related">相关笔记</button>' +
-    '<button data-menu="copy-link">复制链接</button>' +
     '<button data-menu="comment">批注</button>' +
     '<button data-menu="more" class="menu-more">更多<span class="chev">›</span></button>' +
     '<div class="menu-sub" hidden>' +
@@ -2197,3 +2209,73 @@ $('#sel-done').onclick = exitSelect;
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.body.classList.contains('select-mode')) exitSelect();
 });
+
+/* ---------------- 写笔记时设提醒 ---------------- */
+let draftRemind = { at: 0, calendar: false };
+function toLocalInput(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function setDraftRemind(at, calendar) {
+  draftRemind = { at: Number(at) || 0, calendar: !!calendar };
+  const chip = $('#remind-chip');
+  if (!chip) return;
+  chip.hidden = !draftRemind.at;
+  $('#btn-remind').classList.toggle('on', !!draftRemind.at);
+  if (draftRemind.at) {
+    $('#remind-chip-text').textContent = '⏰ ' + fmtRemind(draftRemind.at) + (draftRemind.calendar ? ' · 日历' : '');
+    replayClass(chip, 'pop-in');
+  }
+}
+async function refreshReminderCount() {
+  try { const d = await api('/api/reminders'); $('#stat-reminders').textContent = d.count || 0; } catch (e) { /* 忽略 */ }
+}
+function quickRemind(k) {
+  const d = new Date();
+  if (k === 'tonight') { d.setHours(20, 0, 0, 0); if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1); }
+  else if (k === 'tomorrow') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+  else if (k === 'nextweek') { const delta = ((1 - d.getDay()) + 7) % 7 || 7; d.setDate(d.getDate() + delta); d.setHours(9, 0, 0, 0); }
+  return d.getTime();
+}
+if (!POPS.includes('#remind-pop')) POPS.push('#remind-pop');
+$('#btn-remind').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const pop = $('#remind-pop');
+  if (!pop.hidden && !pop.classList.contains('closing')) { popClose(pop); return; }
+  closePopsExcept('#remind-pop');
+  const base = draftRemind.at || quickRemind('tomorrow');
+  $('#remind-at').value = toLocalInput(base);
+  $('#remind-cal').checked = draftRemind.at ? draftRemind.calendar : false;
+  popOpen(pop);
+});
+$('#remind-pop').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const q = e.target.closest('[data-rq]');
+  if (q) {
+    $('#remind-at').value = toLocalInput(quickRemind(q.dataset.rq));
+    document.querySelectorAll('#remind-pop [data-rq]').forEach((b) => b.classList.toggle('on', b === q));
+    return;
+  }
+  if (e.target.closest('#remind-ok')) {
+    const v = $('#remind-at').value;
+    const at = v ? new Date(v).getTime() : 0;
+    if (!at) { toast('选一个时间'); return; }
+    if (at <= Date.now()) { toast('提醒时间要晚于现在'); return; }
+    setDraftRemind(at, $('#remind-cal').checked);
+    popClose($('#remind-pop'));
+    draft.focus();
+  }
+});
+$('#remind-chip-x').addEventListener('click', (e) => { e.stopPropagation(); setDraftRemind(0, false); toast('已取消提醒'); });
+
+/* 弹窗「取消」：显式关闭，不依赖表单校验 */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-close-dialog]');
+  if (!b) return;
+  e.preventDefault();
+  const d = b.closest('dialog');
+  if (d && d.open) d.close();
+});
+
+/* 热力图气泡挂到 body 下：侧栏的 backdrop-filter 会把 fixed 元素困在侧栏里被裁切 */
+(() => { const t = document.getElementById('heat-tip'); if (t && t.parentElement !== document.body) document.body.appendChild(t); })();
