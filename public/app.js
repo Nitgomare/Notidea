@@ -872,8 +872,7 @@ document.addEventListener('keydown', (e) => {
   // Alt+Shift+A 唤起 AI 面板（和 flomo 一致）
   if (e.altKey && e.shiftKey && key === 'a') {
     e.preventDefault();
-    document.querySelector('.app').classList.remove('rail-off');
-    $('#btn-ai-run').focus();
+    toggleRail();
     return;
   }
 
@@ -946,19 +945,21 @@ const APP = () => document.querySelector('.app');
 function syncScrim() {
   const scrim = $('#scrim');
   if (!scrim) return;
-  const open = APP().classList.contains('side-open') || APP().classList.contains('rail-open');
-  scrim.hidden = !open;
+  // AI 面板是浮动卡片，不需要遮罩；遮罩只服务于窄屏侧栏抽屉
+  scrim.hidden = !APP().classList.contains('side-open');
 }
-function openRail() { APP().classList.remove('rail-off'); APP().classList.add('rail-open'); syncScrim(); }
-function closeRail() { APP().classList.add('rail-off'); APP().classList.remove('rail-open'); syncScrim(); }
-function toggleSide() { APP().classList.toggle('side-open'); APP().classList.remove('rail-open'); syncScrim(); }
+function openRail() {
+  APP().classList.add('rail-open');
+  APP().classList.remove('side-open');
+  syncScrim();
+  setTimeout(() => { const ask = $('#ask-input'); (state.aiSkill === 'ask' && ask ? ask : $('#btn-ai-run')).focus(); }, 200);
+}
+function closeRail() { APP().classList.remove('rail-open'); syncScrim(); }
+function toggleRail() { if (APP().classList.contains('rail-open')) closeRail(); else openRail(); }
+function toggleSide() { APP().classList.toggle('side-open'); syncScrim(); }
 $('#btn-rail-close').onclick = closeRail;
-$('#btn-ai-panel').onclick = () => {
-  if (APP().classList.contains('rail-open')) closeRail();
-  else { openRail(); APP().classList.remove('side-open'); }
-};
+$('#btn-ai-fab').onclick = toggleRail;
 $('#btn-side').onclick = toggleSide;
-$('#btn-ai-mobile').onclick = () => { if (APP().classList.contains('rail-open')) closeRail(); else { openRail(); APP().classList.remove('side-open'); } };
 $('#scrim').onclick = () => {
   APP().classList.remove('side-open');
   APP().classList.remove('rail-open');
