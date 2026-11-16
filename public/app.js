@@ -264,10 +264,17 @@ function openTagMenu(anchor, node) {
   const menu = $('#tag-menu');
   menu.hidden = false;
   const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.min(r.left, window.innerWidth - 200) + 'px';
-  menu.style.top = r.bottom + 6 + 'px';
   const pinBtn = menu.querySelector('[data-act="pin"]');
   pinBtn.textContent = node.pinned ? '取消置顶' : '置顶';
+  // 小窗口下放不下就往上翻，并夹在视口内
+  const mw = menu.offsetWidth || 190;
+  const mh = menu.offsetHeight || 220;
+  const vh = window.innerHeight;
+  let left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8));
+  let top = r.bottom + 6;
+  if (top + mh > vh - 8) top = r.top - mh - 6 >= 8 ? r.top - mh - 6 : Math.max(8, vh - mh - 8);
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
 }
 
 document.addEventListener('click', (e) => {
