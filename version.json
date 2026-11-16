@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "notes": "每条笔记的菜单（分享/编辑/复制/新窗口/浮窗/AI 洞察/相关笔记/复制链接/批注/更多），批注功能",
+  "version": "1.2.1",
+  "notes": "新增「创建桌面快捷方式.cmd」：可自选保存位置（默认桌面），默认打开桌面版独立窗口",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }
