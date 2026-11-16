@@ -666,8 +666,8 @@ button:active:not(:disabled) { transform: scale(.95); }
 .sidebar { animation: slideL .6s var(--ease) both; }
 .main > * { animation: rise .6s var(--ease) both; }
 .main > .topbar { animation-delay: .04s; }
-.main > .composer { animation-delay: .1s; }
 .main > .list-head { animation-delay: .16s; }
+.main-head > .composer { animation-delay: .1s; }
 .main > .memo-list { animation: none; }
 .rail { animation: slideR .6s var(--ease) .08s both; }
 
@@ -1127,13 +1127,14 @@ body.single-mode .ai-fab { display: none; }
 /* =====================================================================
    v2 布局：仿 flomo 左右铺满；顶栏「标题▾ … 搜索」；卡片头部元信息
    ===================================================================== */
-.main { max-width: none; margin: 0; padding: 14px 28px 40px; }
-.topbar {
-  position: sticky; top: -14px; z-index: 30; margin: -14px -28px 12px; padding: 14px 28px 10px;
-  display: flex; align-items: center; gap: 12px;
-  background: linear-gradient(to bottom, rgba(243, 243, 247, .92) 70%, rgba(243, 243, 247, 0));
-  backdrop-filter: blur(10px);
+.main { max-width: none; margin: 0; padding: 0 28px 40px; }
+/* 顶部常驻区：标题栏 + 输入框一起吸顶，滚动时都不消失 */
+.main-head {
+  position: sticky; top: 0; z-index: 50; margin: 0 -28px 12px; padding: 20px 28px 10px;
+  background: linear-gradient(to bottom, #f3f3f7 0 90%, rgba(243, 243, 247, 0));
+  backdrop-filter: blur(8px);
 }
+.topbar { margin-bottom: 12px; }
 .view-wrap { position: relative; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .view-title {
   display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent;
@@ -1235,7 +1236,7 @@ body.single-mode .ai-fab { display: none; }
 .f-foot { display: flex; justify-content: flex-end; padding: 8px 4px 2px; }
 
 /* 输入框：底部小工具栏 + 发送按钮 */
-.composer { margin-bottom: 14px; }
+.composer { margin-bottom: 0; }
 .composer-foot { align-items: center; gap: 8px; }
 .tools { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
 .tools button {
@@ -1319,12 +1320,13 @@ body.select-mode .memo-actions, body.select-mode .ai-fab { visibility: hidden; }
 .heat-tip i { display: inline; margin: 0 0 0 8px; }
 
 @media (max-width: 1080px) {
-  .main { padding: 12px 18px 32px; }
-  .topbar { margin: -12px -18px 10px; padding: 12px 18px 10px; }
+  .main { padding: 0 18px 32px; }
+  .main-head { margin: 0 -18px 10px; padding: 18px 18px 10px; }
 }
 @media (max-width: 760px) {
-  .main { padding: 10px 12px 24px; }
-  .topbar { margin: -10px -12px 8px; padding: 10px 12px 8px; flex-wrap: wrap; }
+  .main { padding: 0 12px 24px; }
+  .main-head { margin: 0 -12px 8px; padding: 14px 12px 8px; }
+  .topbar { flex-wrap: wrap; }
   .search-wrap, .search-wrap:focus-within { flex: 1 1 100%; order: 3; }
   .search-wrap:focus-within input { padding-right: 40px; }
   .search-mode { display: none; }
@@ -1403,4 +1405,4 @@ body.select-mode .memo-actions, body.select-mode .ai-fab { visibility: hidden; }
 /* 输入框里的弹层（提醒 / @ 引用）要盖住下面的卡片：卡片带动画会各自建层叠上下文 */
 .composer { z-index: 40; }
 .composer:focus-within, .composer:has(.pop:not([hidden])) { z-index: 45; }
-.topbar { position: relative; z-index: 50; }
+/* 顶栏常驻：保持 sticky（z-index 已在上方 .topbar 规则里设为 50，高于 composer） */

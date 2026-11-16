@@ -1,6 +1,6 @@
 {
-  "version": "1.2.5",
-  "notes": "检查更新改走 GitHub API（绕开 raw 的 CDN 缓存），jsDelivr 兜底；版本号实时读磁盘；检查结果缓存 10 分钟→1 分钟",
+  "version": "1.3.0",
+  "notes": "顶栏（标题/搜索/筛选）与输入框常驻顶部；搜索框顶部留白加大；修复单条洞察未把笔记正文传给模型；修复自动更新失败（PowerShell 5.1 加载到 PS7 解压模块导致静默失败）；仿 flomo 排版重设计汇总",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }

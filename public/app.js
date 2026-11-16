@@ -762,7 +762,7 @@ async function memoAction(act, card) {
   }
 
   if (act === 'insight') {
-    openInsight();
+    openInsight(id);
     runInsight({ id: 'default', name: '单条洞察', category: '复盘整理', days: 0, range: '这条笔记', single: true, memoId: id });
     return;
   }
@@ -1337,7 +1337,7 @@ async function runInsight(p) {
   body.textContent = '正在读你的笔记…';
   $('#btn-insight-save').hidden = true;
 
-  const payload = p.single ? { memoId: insightState.target, insightSingle: true } : { perspective: p.id, scope };
+  const payload = p.single ? { memoId: p.memoId || insightState.target, insightSingle: true } : { perspective: p.id, scope };
   try {
     const res = await fetch('/api/ai/insight', {
       method: 'POST',
