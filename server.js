@@ -8,6 +8,18 @@ const { URL } = require('url');
 
 const dbm = require('./db');
 const { version: APP_VERSION } = require('./version');
+
+// 版本号以磁盘上的 version.js 为准（更新脚本替换文件后无需重启即可读到新值）
+function currentVersion() {
+  try {
+    const p = require.resolve('./version');
+    delete require.cache[p];
+    const v = require('./version').version;
+    return String(v || APP_VERSION);
+  } catch (e) {
+    return APP_VERSION;
+  }
+}
 const llm = require('./llm');
 
 const PORT = Number(process.env.PORT || 7777);
@@ -309,7 +321,7 @@ async function route(req, res) {
         llm: llm.publicConfig(),
         storage: { path: path.join(__dirname, 'data', 'flomo.db'), fts: dbm.fts },
         reminders: dbm.reminderCount(),
-        app: { version: APP_VERSION },
+        app: { version: currentVersion() },
       });
     }
     if (p === '/api/update/check' && req.method === 'GET') {
@@ -317,7 +329,7 @@ async function route(req, res) {
       return json(res, 200, await checkUpdate(force));
     }
     if (p === '/api/version' && req.method === 'GET') {
-      return json(res, 200, { name: 'flomo local', version: APP_VERSION });
+      return json(res, 200, { name: 'flomo local', version: currentVersion() });
     }
     if (p === '/api/shortcut' && req.method === 'POST') {
       try {
@@ -597,34 +609,65 @@ function compareVersion(a, b) {
   return 0;
 }
 
-async function checkUpdate(force) {
-  if (!force && updateCache.data && Date.now() - updateCache.at < 10 * 60 * 1000) return updateCache.data;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 6000);
+async function fetchLatestInfo() {
+  // 1) GitHub API（不走 CDN，最可靠）
+  try {
+    const r = await fetch('https://api.github.com/repos/' + UPDATE_REPO + '/releases/latest', {
+      headers: { 'user-agent': 'flomo-local', accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      const version = String(j.tag_name || '').replace(/^v/i, '');
+      if (version) {
+        return { version, notes: String(j.body || ''), url: String(j.html_url || UPDATE_RELEASE_URL) };
+      }
+    }
+  } catch (e) { /* 下一个 */ }
+
+  // 2) 仓库根 version.json（raw；加时间戳绕缓存）
   try {
     const r = await fetch(UPDATE_VERSION_URL + '?t=' + Date.now(), {
-      signal: ctrl.signal,
-      headers: { 'user-agent': 'flomo-local/' + APP_VERSION },
+      headers: { 'user-agent': 'flomo-local', 'cache-control': 'no-cache', pragma: 'no-cache' },
+      signal: AbortSignal.timeout(7000),
     });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const remote = await r.json();
-    const latest = String(remote.version || '');
-    const hasUpdate = compareVersion(latest, APP_VERSION) > 0;
+    if (r.ok) {
+      const j = await r.json();
+      const version = String(j.version || '');
+      if (version) return { version, notes: String(j.notes || ''), url: String(j.url || UPDATE_RELEASE_URL) };
+    }
+  } catch (e) { /* 下一个 */ }
+
+  // 3) jsDelivr 镜像（国内网络更通）
+  const r = await fetch('https://cdn.jsdelivr.net/gh/' + UPDATE_REPO + '@main/version.json?t=' + Date.now(), {
+    headers: { 'user-agent': 'flomo-local' },
+    signal: AbortSignal.timeout(7000),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return { version: String(j.version || ''), notes: String(j.notes || ''), url: String(j.url || UPDATE_RELEASE_URL) };
+}
+
+async function checkUpdate(force) {
+  const current = currentVersion();
+  if (!force && updateCache.data && Date.now() - updateCache.at < 60 * 1000) return updateCache.data;
+  try {
+    const info = await fetchLatestInfo();
+    const latest = info.version;
+    const hasUpdate = compareVersion(latest, current) > 0;
     const data = {
-      current: APP_VERSION,
+      current,
       latest,
       hasUpdate,
-      notes: String(remote.notes || ''),
-      url: String(remote.url || UPDATE_RELEASE_URL),
+      notes: info.notes,
+      url: info.url,
       asset: hasUpdate ? UPDATE_APP_ZIP(latest) : '',
       checkedAt: Date.now(),
     };
     updateCache = { at: Date.now(), data };
     return data;
   } catch (e) {
-    return { current: APP_VERSION, latest: null, hasUpdate: false, error: String(e.message || e), checkedAt: Date.now() };
-  } finally {
-    clearTimeout(timer);
+    return { current, latest: null, hasUpdate: false, error: String(e.message || e), checkedAt: Date.now() };
   }
 }
 

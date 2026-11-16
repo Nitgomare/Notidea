@@ -1,6 +1,6 @@
 {
-  "version": "1.2.4",
-  "notes": "创建桌面快捷方式：桌面位置自动识别（注册表 → 系统已知文件夹 → 用户目录），支持 C/D 盘与 OneDrive 重定向",
+  "version": "1.2.5",
+  "notes": "检查更新改走 GitHub API（绕开 raw 的 CDN 缓存），jsDelivr 兜底；版本号实时读磁盘；检查结果缓存 10 分钟→1 分钟",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }
