@@ -1,6 +1,6 @@
 {
-  "version": "1.3.2",
-  "notes": "更新下载增加镜像回退（GitHub 资产域名被解析到 127.0.0.1 时改走 jsDelivr / raw）；下载失败时给出手动下载链接；含 1.3.1 与 1.3.0 的全部修复",
+  "version": "1.3.2-beta",
+  "notes": "1.3.2 beta：用于测试自动更新（点更新应升到 1.3.2 正式版）；含除版本比较预发布规则外的 1.3.2 全部修复",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }

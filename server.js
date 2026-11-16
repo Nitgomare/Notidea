@@ -750,10 +750,34 @@ let updateCache = { at: 0, data: null };
 function versionParts(v) {
   return String(v || '0').split('.').map((n) => parseInt(n, 10) || 0);
 }
+// 1.3.2-beta / 1.3.2-rc.1 这类预发布版本要排在 1.3.2 之前（否则 beta 永远认为自己是新版）
+function parseVersion(v) {
+  const s = String(v || '0').trim().replace(/^v/i, '');
+  const dash = s.indexOf('-');
+  return {
+    nums: versionParts(dash >= 0 ? s.slice(0, dash) : s),
+    pre: dash >= 0 ? s.slice(dash + 1).split('.').filter(Boolean) : [],
+  };
+}
 function compareVersion(a, b) {
-  const x = versionParts(a), y = versionParts(b);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+  const x = parseVersion(a), y = parseVersion(b);
+  for (let i = 0; i < Math.max(x.nums.length, y.nums.length); i++) {
+    const p = x.nums[i] || 0, q = y.nums[i] || 0;
+    if (p !== q) return p > q ? 1 : -1;
+  }
+  if (!x.pre.length && !y.pre.length) return 0;
+  if (!x.pre.length) return 1;
+  if (!y.pre.length) return -1;
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    if (x.pre[i] === undefined) return -1;
+    if (y.pre[i] === undefined) return 1;
+    const nx = /^\d+$/.test(x.pre[i]), ny = /^\d+$/.test(y.pre[i]);
+    if (nx && ny) {
+      const p = Number(x.pre[i]), q = Number(y.pre[i]);
+      if (p !== q) return p > q ? 1 : -1;
+    } else if (x.pre[i] !== y.pre[i]) {
+      return x.pre[i] > y.pre[i] ? 1 : -1;
+    }
   }
   return 0;
 }
