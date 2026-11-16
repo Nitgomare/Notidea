@@ -1,6 +1,6 @@
 {
-  "version": "1.2.3",
-  "notes": "窄窗口自适应：侧栏与 AI 面板变抽屉，卡片底部不再重叠，桌面端三栏不变",
+  "version": "1.2.4",
+  "notes": "创建桌面快捷方式：桌面位置自动识别（注册表 → 系统已知文件夹 → 用户目录），支持 C/D 盘与 OneDrive 重定向",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }
