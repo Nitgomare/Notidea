@@ -83,11 +83,13 @@
 
   <main class="main">
     <header class="topbar">
+      <button class="icon-btn mobile-only" id="btn-side" title="导航">☰</button>
       <div class="search-wrap">
         <input id="search" type="search" placeholder="搜索笔记…  Ctrl+K" autocomplete="off">
         <kbd>Ctrl K</kbd>
       </div>
       <div class="topbar-right"><span class="muted" id="memo-count"></span></div>
+      <button class="icon-btn mobile-only" id="btn-ai-mobile" title="AI 面板">✧</button>
     </header>
 
     <section class="composer" id="composer">
@@ -258,6 +260,7 @@
   <button data-act="delete" class="danger">删除标签</button>
 </div>
 
+<div class="scrim" id="scrim" hidden></div>
 <div class="toast" id="toast" hidden></div>
 <script src="/app.js"></script>
 </body>

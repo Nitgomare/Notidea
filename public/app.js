@@ -380,7 +380,7 @@ function memoNode(m) {
       (backCount ? '<span class="memo-back" title="有几条笔记引用了它">↩ ' + backCount + '</span>' : '') +
       '<span class="memo-words muted small">' + words + ' 字' + (isEdited ? ' · 编辑于 ' + fmtTime(m.updated_at) : '') + '</span>' +
       '<div class="memo-actions">' +
-        '<button class="memo-ai" data-act="insight" title="用 AI 看这条笔记">✧ AI 洞察</button>' +
+        '<button class="memo-ai" data-act="insight" title="用 AI 看这条笔记">✧<span class="ai-label"> AI 洞察</span></button>' +
         '<button class="memo-dot" data-act="menu" title="更多">⋯</button>' +
       '</div>' +
     '</div>' +
@@ -832,6 +832,12 @@ document.addEventListener('keydown', (e) => {
 
   // Esc：先关弹窗，再清搜索
   if (e.key === 'Escape') {
+    if (APP().classList.contains('side-open') || APP().classList.contains('rail-open')) {
+      APP().classList.remove('side-open');
+      APP().classList.remove('rail-open');
+      syncScrim();
+      return;
+    }
     const openDialog = [...document.querySelectorAll('dialog[open]')].pop();
     if (openDialog) { openDialog.close(); return; }
     if (document.activeElement === $('#search')) {
@@ -889,10 +895,28 @@ $('#btn-tag-sort').onclick = () => {
 };
 
 /* ---------------- 右栏 AI ---------------- */
-function openRail() { document.querySelector('.app').classList.remove('rail-off'); }
-function closeRail() { document.querySelector('.app').classList.add('rail-off'); }
+const APP = () => document.querySelector('.app');
+function syncScrim() {
+  const scrim = $('#scrim');
+  if (!scrim) return;
+  const open = APP().classList.contains('side-open') || APP().classList.contains('rail-open');
+  scrim.hidden = !open;
+}
+function openRail() { APP().classList.remove('rail-off'); APP().classList.add('rail-open'); syncScrim(); }
+function closeRail() { APP().classList.add('rail-off'); APP().classList.remove('rail-open'); syncScrim(); }
+function toggleSide() { APP().classList.toggle('side-open'); APP().classList.remove('rail-open'); syncScrim(); }
 $('#btn-rail-close').onclick = closeRail;
-$('#btn-ai-panel').onclick = () => document.querySelector('.app').classList.toggle('rail-off');
+$('#btn-ai-panel').onclick = () => {
+  if (APP().classList.contains('rail-open')) closeRail();
+  else { openRail(); APP().classList.remove('side-open'); }
+};
+$('#btn-side').onclick = toggleSide;
+$('#btn-ai-mobile').onclick = () => { if (APP().classList.contains('rail-open')) closeRail(); else { openRail(); APP().classList.remove('side-open'); } };
+$('#scrim').onclick = () => {
+  APP().classList.remove('side-open');
+  APP().classList.remove('rail-open');
+  syncScrim();
+};
 $('#btn-collapse').onclick = () => document.querySelector('.app').classList.toggle('side-off');
 
 let currentAi = { skill: null, text: '', payload: {} };

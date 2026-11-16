@@ -1,6 +1,6 @@
 {
-  "version": "1.2.2",
-  "notes": "批注 @提醒 与提醒列表、批注搜索、分享长图、一键自动更新（不用手动下载）、设置里创建桌面快捷方式",
+  "version": "1.2.3",
+  "notes": "窄窗口自适应：侧栏与 AI 面板变抽屉，卡片底部不再重叠，桌面端三栏不变",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-16"
 }

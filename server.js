@@ -333,11 +333,11 @@ async function route(req, res) {
         if (info.error) return json(res, 502, { error: '检查更新失败：' + info.error });
         if (!info.hasUpdate) return json(res, 400, { error: '已经是最新版本' });
         const dl = await downloadUpdate(info);
-        const ps1 = writeApplyScript(dl.zip);
+        const vbs = writeApplyScript(dl.zip);
         const latest = info.latest;
         setTimeout(() => {
           try {
-            spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1], {
+            spawn('wscript.exe', [vbs], {
               detached: true, stdio: 'ignore', windowsHide: true, cwd: __dirname,
             }).unref();
           } catch (e) { /* 交给用户手动重启 */ }
@@ -674,15 +674,26 @@ function writeApplyScript(zipPath) {
     'for ($i = 0; $i -lt 120; $i++) { if (Port-Free) { break }; Start-Sleep -Milliseconds 250 }',
     'Start-Sleep -Milliseconds 400',
     'Expand-Archive -LiteralPath $zip -DestinationPath $src -Force',
-    'robocopy $src $root /E /NFL /NDL /NJH /NJS /XD (Join-Path $root "data") (Join-Path $root "runtime") | Out-Null',
+    'robocopy $src $root /E /NFL /NDL /NJH /NJS /XD "$root\\data" "$root\\runtime" | Out-Null',
     'Start-Process -FilePath $node -ArgumentList (\'"\' + (Join-Path $root "server.js") + \'"\') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $root "data\\server.log") -RedirectStandardError (Join-Path $root "data\\server.err.log")',
     'Start-Sleep -Seconds 1',
     'Remove-Item -LiteralPath $zip -Force',
     'Remove-Item -LiteralPath $src -Recurse -Force',
+    "$vbsSelf = Join-Path (Split-Path -Parent $PSCommandPath) 'apply.vbs'",
+    'Remove-Item -LiteralPath $vbsSelf -Force',
+    'Remove-Item -LiteralPath $PSCommandPath -Force',
     '',
   ].join('\r\n');
   fs.writeFileSync(ps1, '\ufeff' + content, 'utf8');
-  return ps1;
+
+  const vbsPath = path.join(dir, 'apply.vbs');
+  const vbs = [
+    'Set sh = CreateObject("WScript.Shell")',
+    'sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""' + ps1 + '""", 0, False',
+    '',
+  ].join('\r\n');
+  fs.writeFileSync(vbsPath, vbs, 'utf8');
+  return vbsPath;
 }
 
 const server = http.createServer((req, res) => {
