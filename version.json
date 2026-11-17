@@ -1,6 +1,6 @@
 {
-  "version": "2.3.0",
-  "notes": "融合设计稿：新图标（紫色圆角方块 + 开口 n）、侧栏品牌标记、主色改 Iris #6255D9、去掉项目里的 flomo 提法",
+  "version": "2.3.1",
+  "notes": "修复：启动时窗口偶尔隐藏（补 show 兜底 + 校验上次的窗口坐标）",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }

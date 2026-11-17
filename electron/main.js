@@ -79,6 +79,8 @@ function loadBounds() {
     const b = { x: Number(p[0]), y: Number(p[1]), width: Number(p[2]), height: Number(p[3]) };
     if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) return fallback;
     if (b.width < 720 || b.height < 520) return fallback;
+    // 上次是在托盘/最小化状态退出的，坐标可能是 -32000，这种直接回默认
+    if (b.x < -10000 || b.y < -10000 || b.x > 20000 || b.y > 20000) return fallback;
     return b;
   } catch (e) {
     return fallback;
@@ -129,7 +131,13 @@ async function createWindow() {
     },
   });
 
-  win.once('ready-to-show', () => win.show());
+  // ready-to-show 偶尔不触发（窗口会一直藏着），补两道兜底
+  const showOnce = () => {
+    if (win && !win.isDestroyed() && !win.isVisible()) win.show();
+  };
+  win.once('ready-to-show', showOnce);
+  win.webContents.on('did-finish-load', showOnce);
+  setTimeout(showOnce, 2500);
   win.on('maximize', () => { clampMaximized(); sendState(); });
   win.on('unmaximize', sendState);
   win.on('resize', saveBounds);
