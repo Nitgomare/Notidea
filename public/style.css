@@ -1194,7 +1194,7 @@ body.single-mode .ai-fab { display: none; }
 .pop:not([hidden]) { animation: popOpen .38s var(--spring) both; }
 .pop.closing { animation: popClose .18s ease forwards; pointer-events: none; }
 @keyframes popOpen { from { opacity: 0; transform: translateY(-8px) scale(.92); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
-@keyframes popClose { to { opacity: 0; transform: translateY(-6px) scale(.96); filter: blur(4px); } }
+@keyframes popClose { from { opacity: var(--pop-close-opacity, 1); transform: var(--pop-close-transform, none); filter: var(--pop-close-filter, none); } to { opacity: 0; transform: translateY(-6px) scale(.96); filter: blur(4px); } }
 .pop:not([hidden]) > * { animation: rise .4s var(--ease) both; }
 .pop:not([hidden]) > *:nth-child(2) { animation-delay: .03s; }
 .pop:not([hidden]) > *:nth-child(3) { animation-delay: .06s; }

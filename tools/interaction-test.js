@@ -80,6 +80,69 @@ test('Escape consumes only the top dialog before rail or selection', () => {
   callbacks[0]({ key: 'Escape', preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; } });
   assert.equal(dialog.closed, true); assert.equal(prevented, true); assert.equal(stopped, true);
 });
+function searchHarness(reduced = false) {
+  let now = 0, seq = 0;
+  const timers = new Map(), elements = new Map(), handlers = new Map();
+  const document = { activeElement: null, addEventListener: (type, fn) => handlers.set(type, fn), querySelectorAll: (s) => s.includes('.pop,') ? [$('#search-pop')] : [], body: { classList: { contains: () => false } } };
+  const $ = (id) => {
+    if (!elements.has(id)) {
+      const classes = new Set(), listeners = new Map();
+      const el = { id: id.slice(1), value: '', hidden: true, style: { setProperty(k, v) { this[k] = v; } },
+        classList: { add: (...names) => names.forEach((n) => classes.add(n)), remove: (...names) => names.forEach((n) => classes.delete(n)), contains: (n) => classes.has(n) },
+        addEventListener(type, fn) { const list = listeners.get(type) || []; list.push(fn); listeners.set(type, list); },
+        dispatchEvent(e) { e.target ||= el; for (const fn of listeners.get(e.type) || []) fn(e); },
+        contains: (other) => !!other && (other === el || id === '#search-wrap' && ['search', 'quick', 'recent'].includes(other.id)),
+        closest: () => null,
+        focus() { if (document.activeElement === el) return; const old = document.activeElement; document.activeElement = el; if (old && $('#search-wrap').contains(old)) $('#search-wrap').dispatchEvent({ type: 'focusout', relatedTarget: el }); el.dispatchEvent({ type: 'focus' }); },
+        blur() { if (document.activeElement !== el) return; document.activeElement = null; $('#search-wrap').dispatchEvent({ type: 'focusout', relatedTarget: null }); }, select() {},
+      };
+      elements.set(id, el);
+    }
+    return elements.get(id);
+  };
+  const code = part('const reduceMotion =', '/* 折叠区') + part('state.searchMode =', '/* ---- 筛选面板') + part("document.addEventListener('keydown', (e) => {", "document.querySelectorAll('.nav-item[data-filter]')");
+  const h = harness(code, { $, document, matchMedia: () => ({ matches: reduced }), getComputedStyle: () => ({ opacity: '0.03', transform: 'matrix(1, 0, 0, 1, 0, -9)', filter: 'none' }),
+    setTimeout: (fn, ms) => { const id = ++seq; timers.set(id, { at: now + ms, fn }); return id; }, clearTimeout: (id) => timers.delete(id),
+    replayClass: (el, cls) => el.classList.add(cls), state: { view: {} }, localStorage: { getItem: () => null }, escapeHtml: String, setFilter() {}, loadMemos() {},
+  });
+  return { ...h, $, document, key: (key, extra = {}) => handlers.get('keydown')({ key, preventDefault() {}, stopImmediatePropagation() {}, ...extra }),
+    tick(ms) { const end = now + ms; while (true) { const next = [...timers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0]; if (!next) break; now = next[1].at; timers.delete(next[0]); next[1].fn(); } now = end; },
+  };
+}
+test('rapid focus/input hides immediately and stale close cannot hide a reopened pop', () => {
+  const h = searchHarness(), input = h.$('#search'), pop = h.$('#search-pop');
+  input.focus(); h.tick(1); input.value = 'x'; input.dispatchEvent({ type: 'input' });
+  assert.equal(pop.hidden, true);
+  input.value = ''; input.dispatchEvent({ type: 'input' }); assert.equal(pop.hidden, false);
+  h.run("popClose($('#search-pop'))"); h.tick(100);
+  h.run("popOpen($('#search-pop')); popClose($('#search-pop'))");
+  h.tick(80); assert.equal(pop.hidden, false, 'first close deadline must not end second close');
+  h.tick(100); assert.equal(pop.hidden, true);
+  h.run("popOpen($('#search-pop')); popClose($('#search-pop'))"); h.tick(50); h.run("popOpen($('#search-pop'))"); h.tick(200);
+  assert.equal(pop.hidden, false);
+});
+test('close animation captures current opacity instead of resetting to opaque', () => {
+  const h = searchHarness(); h.$('#search').focus(); h.run("popClose($('#search-pop'))");
+  assert.equal(h.$('#search-pop').style['--pop-close-opacity'], '0.03');
+  const css = fs.readFileSync(require('node:path').join(__dirname, '../public/style.css'), 'utf8');
+  assert.match(css, /@keyframes popClose \{ from \{ opacity: var\(--pop-close-opacity, 1\)/);
+});
+test('quick item click closes even when focus stays inside search wrapper', () => {
+  const h = searchHarness(); h.$('#search').focus(); h.$('#quick').focus();
+  h.$('#search-pop').dispatchEvent({ type: 'click', preventDefault() {}, target: { closest: (s) => s === '[data-quick]' ? { dataset: { quick: 'onthisday' } } : null } });
+  assert.equal(h.$('#search-pop').hidden, true); assert.equal(h.run('state.view.onThisDay'), true);
+});
+test('Escape restores search focus without reopening; Ctrl+K and subsequent focus still work', () => {
+  const h = searchHarness(); h.$('#search').focus(); h.$('#quick').focus(); h.key('Escape');
+  assert.equal(h.document.activeElement, h.$('#search')); assert.equal(h.$('#search-pop').hidden, true);
+  h.$('#search').blur(); h.key('k', { ctrlKey: true }); assert.equal(h.$('#search-pop').hidden, false);
+  h.$('#quick').focus(); h.$('#outside').focus(); h.tick(180); assert.equal(h.$('#search-pop').hidden, true);
+});
+test('reduced motion close and immediate close cancel pending animation timers', () => {
+  const h = searchHarness(true); h.$('#search').focus(); h.run("popClose($('#search-pop'))"); assert.equal(h.$('#search-pop').hidden, true);
+  const animated = searchHarness(); animated.$('#search').focus(); animated.run("popClose($('#search-pop'))"); animated.tick(50);
+  animated.run("popClose($('#search-pop'), true); popOpen($('#search-pop'))"); animated.tick(200); assert.equal(animated.$('#search-pop').hidden, false);
+});
 test('keyboard and filter regressions remain guarded', () => {
   assert.ok(!source.includes("if (e.key === 'Tab') { e.preventDefault()"));
   assert.ok(source.includes('if (r || tm || fh || fs'));

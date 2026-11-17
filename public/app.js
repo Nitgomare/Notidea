@@ -1085,10 +1085,12 @@ document.addEventListener('keydown', (e) => {
     const menu = menus.pop();
     if (menu) {
       consume();
-      menu.hidden = true;
+      popClose(menu, true);
       $('#btn-view').classList.remove('open');
       const anchor = { 'view-pop': '#btn-view', 'filter-pop': '#btn-filter', 'search-pop': '#search', 'mention-pop': '#draft', 'remind-pop': '#btn-remind' }[menu.id];
-      if (anchor && document.activeElement !== $(anchor)) $(anchor).focus();
+      suppressSearchPop = menu.id === 'search-pop';
+      try { if (anchor && document.activeElement !== $(anchor)) $(anchor).focus(); }
+      finally { suppressSearchPop = false; }
       return;
     }
     if (openDialog) { consume(); openDialog.close(); return; }
@@ -2240,17 +2242,37 @@ document.addEventListener('pointermove', (e) => {
 
 /* ================= 顶栏视图菜单 / 搜索 / 筛选 / 工具栏 / 多选 ================= */
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const popCloseTimers = new WeakMap();
 function popOpen(el) {
   if (!el) return;
+  clearTimeout(popCloseTimers.get(el));
+  popCloseTimers.delete(el);
+  if (!el.hidden && !el.classList.contains('closing')) return;
   el.classList.remove('closing');
   el.hidden = false;
   replayClass(el, 'opening');
 }
-function popClose(el) {
-  if (!el || el.hidden || el.classList.contains('closing')) return;
-  if (reduceMotion()) { el.hidden = true; return; }
+function popClose(el, immediate = false) {
+  if (!el) return;
+  if (immediate || reduceMotion()) {
+    clearTimeout(popCloseTimers.get(el));
+    popCloseTimers.delete(el);
+    el.hidden = true;
+    el.classList.remove('closing', 'opening');
+    return;
+  }
+  if (el.hidden || el.classList.contains('closing')) return;
+  const current = getComputedStyle(el);
+  el.style.setProperty('--pop-close-opacity', current.opacity);
+  el.style.setProperty('--pop-close-transform', current.transform);
+  el.style.setProperty('--pop-close-filter', current.filter);
+  el.classList.remove('opening');
   el.classList.add('closing');
-  setTimeout(() => { if (el.classList.contains('closing')) { el.hidden = true; el.classList.remove('closing'); } }, 170);
+  popCloseTimers.set(el, setTimeout(() => {
+    el.hidden = true;
+    el.classList.remove('closing');
+    popCloseTimers.delete(el);
+  }, 180));
 }
 const POPS = ['#view-pop', '#search-pop', '#filter-pop', '#mention-pop'];
 function closePopsExcept(keep) { POPS.forEach((s) => { if (s !== keep) popClose($(s)); }); }
@@ -2315,18 +2337,24 @@ function setSearchMode(mode) {
   $('#search-wrap').classList.toggle('ai-mode', mode === 'ai');
   $('#search').placeholder = mode === 'ai' ? '问一个只有笔记知道的问题，回车提问' : 'Ctrl+K';
 }
+let suppressSearchPop = false;
 $('#search').addEventListener('focus', () => {
   $('#search-wrap').classList.add('focus');
+  if (suppressSearchPop) return;
   closePopsExcept('#search-pop');
   renderRecent();
   if (!$('#search').value) popOpen($('#search-pop'));
 });
-$('#search').addEventListener('blur', () => {
-  setTimeout(() => {
-    if (!$('#search-wrap').contains(document.activeElement)) { $('#search-wrap').classList.remove('focus'); popClose($('#search-pop')); }
-  }, 120);
+$('#search-wrap').addEventListener('focusout', (e) => {
+  if (!$('#search-wrap').contains(e.relatedTarget)) {
+    $('#search-wrap').classList.remove('focus');
+    popClose($('#search-pop'));
+  }
 });
-$('#search').addEventListener('input', () => { if ($('#search').value) popClose($('#search-pop')); else popOpen($('#search-pop')); }, true);
+$('#search').addEventListener('input', () => {
+  if ($('#search').value || document.activeElement !== $('#search')) popClose($('#search-pop'), true);
+  else popOpen($('#search-pop'));
+}, true);
 $('#search').addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   if (e.key === 'Enter') {
@@ -2354,6 +2382,7 @@ $('#search-pop').addEventListener('click', (e) => {
   const quick = e.target.closest('[data-quick]');
   if (quick) {
     const k = quick.dataset.quick;
+    popClose($('#search-pop'), true);
     $('#search').blur();
     if (k === 'onthisday') { state.view.onThisDay = true; state.filter = { type: 'all' }; state.has = ''; loadMemos(); }
     else setFilter({ type: k });
