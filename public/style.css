@@ -1496,3 +1496,27 @@ body.shell .day-sep button { -webkit-app-region: no-drag; }
 .update-notes table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .update-notes th, .update-notes td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; }
 .update-notes code { background: rgba(0,0,0,.05); padding: 0 3px; border-radius: 4px; }
+
+/* 项目地址链接 */
+.gh-link {
+  color: var(--accent); text-decoration: none; font-size: 12.5px;
+  border-bottom: 1px dashed rgba(91, 76, 245, .35); padding-bottom: 1px;
+}
+.gh-link:hover { border-bottom-style: solid; }
+.foot .gh-link { font-size: 11.5px; }
+
+/* 设置里「项目地址」一行：标签不换行，链接超长省略 */
+.repo-row { display: flex; align-items: center; gap: 10px; margin: 8px 0 10px; }
+.repo-row > span { flex: 0 0 auto; white-space: nowrap; }
+.repo-row .gh-link { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 设置面板左下角的作者 GitHub 图标 */
+.dialog-actions { align-items: center; }
+.gh-icon {
+  margin-right: 8px; width: 30px; height: 30px; border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted); background: transparent;
+  transition: background-color .15s ease, color .15s ease;
+}
+.gh-icon svg { width: 17px; height: 17px; fill: currentColor; }
+.gh-icon:hover { color: var(--ink); background: rgba(31, 41, 51, .07); }
