@@ -1,4 +1,4 @@
-﻿# 打「增量更新包」：只含程序文件，不含 node.exe 和 data
+# 打「增量更新包」：只含程序文件，不含 node.exe 和 data
 # 用法：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-patch.ps1
 #   powershell ... -From 1.0.0 -To 1.1.0
@@ -18,15 +18,17 @@ $stage = Join-Path $dist ('.patch-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 # 1) 程序文件（不含 runtime / data）
-foreach ($f in @('server.js', 'db.js', 'llm.js', 'version.js', 'README.md')) {
+foreach ($f in @('server.js', 'db.js', 'llm.js', 'version.js', 'README.md', 'package.json')) {
   Copy-Item (Join-Path $root $f) $stage
 }
 foreach ($d in @('lib', 'prompts', 'public', 'assets')) {
   Copy-Item (Join-Path $root $d) (Join-Path $stage $d) -Recurse
 }
+New-Item -ItemType Directory -Path (Join-Path $stage 'electron') -Force | Out-Null
+Copy-Item (Join-Path $root 'electron\main.js') (Join-Path $stage 'electron')
+Copy-Item (Join-Path $root 'electron\preload.js') (Join-Path $stage 'electron')
 New-Item -ItemType Directory -Path (Join-Path $stage 'desktop') -Force | Out-Null
 Copy-Item (Join-Path $root 'desktop\launcher.js') (Join-Path $stage 'desktop')
-Copy-Item (Join-Path $root 'desktop\shell') (Join-Path $stage 'desktop\shell') -Recurse
 New-Item -ItemType Directory -Path (Join-Path $stage 'tools') -Force | Out-Null
 foreach ($t in @('import-flomo.js', 'make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
   $src = Join-Path $root ('tools\' + $t)

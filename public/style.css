@@ -1448,3 +1448,13 @@ body.shell .sidebar { padding-top: 18px; }
 
 /* 无边框窗口：滚动条离窗口边缘留一点距离，避免和圆角/边缘视觉干涉 */
 body.shell .main { margin-right: 9px; }
+
+/* ---------- Electron 无边框窗口：拖拽区（-webkit-app-region） ---------- */
+body.shell .topbar, body.shell .brand, body.shell .day-sep { -webkit-app-region: drag; }
+body.shell .topbar button,
+body.shell .topbar input,
+body.shell .topbar .search-wrap,
+body.shell .topbar .search-wrap *,
+body.shell .brand button,
+body.shell .brand a,
+body.shell .day-sep button { -webkit-app-region: no-drag; }

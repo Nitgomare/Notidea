@@ -1,11 +1,11 @@
-﻿# 打包 flomo local 成可分发的 zip
-# 用法：
+﻿# 打包 flomo local（Windows）
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-release.ps1
-#   powershell ... -NoNode            # 不带 Node 运行时（对方自己装 Node 22+）
-#   powershell ... -Version 1.1.0
+# 产出：
+#   dist\flomo-local-<版本>-win-x64.zip   完整包（Electron 壳 + Node 运行时）
+#   dist\flomo-local-<版本>-app.zip       仅程序文件（自动更新用）
+#   updates\flomo-local-<版本>-app.zip    镜像（jsDelivr / raw 兜底）
 param(
-  [string]$Version = '',
-  [switch]$NoNode
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,74 +13,84 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $Version) {
   $Version = (& node -p "require('$($root -replace '\\','/')/version.js').version").Trim()
 }
-$name = 'flomo-local-' + $Version + '-win-x64'
-$dist = Join-Path $root 'dist'
-# 每次用一个全新的暂存目录：旧的构建目录可能被资源管理器/杀软占着句柄，删不掉也不影响本次出包
-$stage = Join-Path $dist ('.stage-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
-# 1) 代码与静态资源（data/ 永远不打包）
-foreach ($f in @('server.js', 'db.js', 'llm.js', 'version.js', 'README.md')) {
-  Copy-Item (Join-Path $root $f) $stage
+$dist = Join-Path $root 'dist'
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+
+# ---------- 1) 程序文件（安装包与更新包共用） ----------
+$app = Join-Path $dist ('.app-' + $stamp)
+New-Item -ItemType Directory -Path $app -Force | Out-Null
+
+foreach ($f in @('server.js', 'db.js', 'llm.js', 'version.js', 'README.md', 'package.json')) {
+  Copy-Item (Join-Path $root $f) $app
 }
 foreach ($d in @('lib', 'prompts', 'public', 'assets')) {
-  Copy-Item (Join-Path $root $d) (Join-Path $stage $d) -Recurse
+  Copy-Item (Join-Path $root $d) (Join-Path $app $d) -Recurse
 }
+New-Item -ItemType Directory -Path (Join-Path $app 'electron') -Force | Out-Null
+Copy-Item (Join-Path $root 'electron\main.js') (Join-Path $app 'electron')
+Copy-Item (Join-Path $root 'electron\preload.js') (Join-Path $app 'electron')
 
-# 2) 桌面壳 + 工具
-New-Item -ItemType Directory -Path (Join-Path $stage 'tools') -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $stage 'desktop') -Force | Out-Null
-Copy-Item (Join-Path $root 'desktop\launcher.js') (Join-Path $stage 'desktop')
-Copy-Item (Join-Path $root 'desktop\shell') (Join-Path $stage 'desktop\shell') -Recurse
-Copy-Item (Join-Path $root 'tools\release\open.vbs') (Join-Path $stage 'desktop')
+New-Item -ItemType Directory -Path (Join-Path $app 'desktop') -Force | Out-Null
+Copy-Item (Join-Path $root 'desktop\launcher.js') (Join-Path $app 'desktop')
+Copy-Item (Join-Path $root 'tools\release\open.vbs') (Join-Path $app 'desktop')
+
+New-Item -ItemType Directory -Path (Join-Path $app 'tools') -Force | Out-Null
 foreach ($t in @('import-flomo.js', 'make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
   $src = Join-Path $root ('tools\' + $t)
-  if (Test-Path $src) { Copy-Item $src (Join-Path $stage 'tools') }
+  if (Test-Path $src) { Copy-Item $src (Join-Path $app 'tools') }
 }
 
-# 3) Node 运行时（默认内置，双击即用）
-if (-not $NoNode) {
-  New-Item -ItemType Directory -Path (Join-Path $stage 'runtime') -Force | Out-Null
-  Copy-Item (Get-Command node).Source (Join-Path $stage 'runtime\node.exe')
-}
+# 启动脚本与说明（源文件在 tools\release\）
+Copy-Item (Join-Path $root 'tools\release\start.cmd') $app
+Copy-Item (Join-Path $root '创建桌面快捷方式.cmd') $app
+Copy-Item (Join-Path $root 'tools\release\start-desktop.cmd') $app
+Copy-Item (Join-Path $root 'tools\release\使用说明.txt') $app
 
-# 4) 启动脚本与说明（源文件在 tools\release\，避免在脚本里拼字符串）
-Copy-Item (Join-Path $root 'tools\release\start.cmd') $stage
-Copy-Item (Join-Path $root '创建桌面快捷方式.cmd') $stage
-Copy-Item (Join-Path $root 'tools\release\start-desktop.cmd') $stage
-Copy-Item (Join-Path $root 'tools\release\使用说明.txt') $stage
-
-# 5) 版本清单（给「检查更新」用）
+# 版本清单
 $verJson = '{"name":"flomo local","version":"' + $Version + '","platform":"win-x64"}'
-Set-Content -Path (Join-Path $stage 'version.json') -Value $verJson -Encoding UTF8
+Set-Content -Path (Join-Path $app 'version.json') -Value $verJson -Encoding UTF8
 
-# 6) 打 zip
-$zip = Join-Path $dist ($name + '.zip')
+# ---------- 2) 更新包（仅程序文件，不含 Electron 运行时与 node.exe） ----------
+$appZip = Join-Path $dist ('flomo-local-' + $Version + '-app.zip')
+if (Test-Path $appZip) { Remove-Item $appZip -Force }
+Compress-Archive -Path (Join-Path $app '*') -DestinationPath $appZip -CompressionLevel Optimal
+$appKb = [math]::Round((Get-Item $appZip).Length / 1KB, 0)
+Write-Output ('app  zip    : ' + $appZip + ' (' + $appKb + ' KB, 自动更新用)')
+
+# ---------- 3) 完整包 = 程序文件 + Electron 壳 + Node 运行时 ----------
+$full = Join-Path $dist ('.full-' + $stamp)
+New-Item -ItemType Directory -Path $full -Force | Out-Null
+Copy-Item -Path (Join-Path $app '*') -Destination $full -Recurse -Force
+
+$eDist = Join-Path $root 'node_modules\electron\dist'
+if (Test-Path (Join-Path $eDist 'electron.exe')) {
+  Copy-Item -Path (Join-Path $eDist '*') -Destination $full -Recurse -Force
+  $exe = Join-Path $full 'electron.exe'
+  Move-Item $exe (Join-Path $full 'flomo-local.exe') -Force
+  # Electron dist 自带一个无扩展名的 version 文件，会抢走 require('./version')，必须删掉
+  Remove-Item (Join-Path $full 'version') -Force -ErrorAction SilentlyContinue
+  Copy-Item (Join-Path $full 'LICENSE') (Join-Path $full 'LICENSE.electron') -ErrorAction SilentlyContinue
+  Write-Output 'electron    : yes'
+} else {
+  Write-Output 'electron    : MISSING（先跑 npm install）'
+}
+
+New-Item -ItemType Directory -Path (Join-Path $full 'runtime') -Force | Out-Null
+Copy-Item (Get-Command node).Source (Join-Path $full 'runtime\node.exe')
+
+$zip = Join-Path $dist ('flomo-local-' + $Version + '-win-x64.zip')
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
-
+Compress-Archive -Path (Join-Path $full '*') -DestinationPath $zip -CompressionLevel Optimal
 $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 Write-Output ('release zip : ' + $zip + ' (' + $mb + ' MB)')
 
-# 7) 自动更新用的「程序包」：内容相同但不带 runtime，客户端下载后覆盖程序文件、保留 data 与 runtime
-$appStage = Join-Path $dist ('.app-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-New-Item -ItemType Directory -Path $appStage -Force | Out-Null
-Copy-Item -Path (Join-Path $stage '*') -Destination $appStage -Recurse -Force
-$runtimeDir = Join-Path $appStage 'runtime'
-if (Test-Path $runtimeDir) { Remove-Item $runtimeDir -Recurse -Force }
-$appZip = Join-Path $dist ('flomo-local-' + $Version + '-app.zip')
-if (Test-Path $appZip) { Remove-Item $appZip -Force }
-Compress-Archive -Path (Join-Path $appStage '*') -DestinationPath $appZip -CompressionLevel Optimal
-$appKb = [math]::Round((Get-Item $appZip).Length / 1KB, 0)
-Write-Output ('app  zip   : ' + $appZip + ' (' + $appKb + ' KB, 自动更新用)')
-
-# 8) 镜像：同一个包放进仓库 updates/，供 jsDelivr / raw 兜底
-#    （release 资产域名 release-assets.githubusercontent.com 在部分网络被解析到 127.0.0.1）
+# ---------- 4) 镜像（jsDelivr / raw 兜底） ----------
 $mirrorDir = Join-Path $root 'updates'
 New-Item -ItemType Directory -Path $mirrorDir -Force | Out-Null
 $mirrorZip = Join-Path $mirrorDir ('flomo-local-' + $Version + '-app.zip')
 Copy-Item $appZip $mirrorZip -Force
-Write-Output ('mirror zip : ' + $mirrorZip + '（记得 git add 并随版本一起推）')
-try { Remove-Item $appStage -Recurse -Force -ErrorAction Stop } catch { }
+Write-Output ('mirror zip  : ' + $mirrorZip + '（记得 git add 并随版本一起推）')
 
-try { Remove-Item $stage -Recurse -Force -ErrorAction Stop } catch { Write-Output ('note: 暂存目录没删掉（句柄被占），可重启后再删：' + $stage) }
+try { Remove-Item $full -Recurse -Force -ErrorAction Stop } catch { }
+try { Remove-Item $app -Recurse -Force -ErrorAction Stop } catch { Write-Output ('note: 暂存目录没删掉：' + $app) }

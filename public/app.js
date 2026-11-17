@@ -1511,12 +1511,28 @@ $('#btn-insight-more').onclick = () => {
     '视角就是一个提示词文件，一个文件一张卡片：\n\n  prompts/insights/<id>.md\n\n文件头写 name / author / category / range / days / icon / description / system，正文里可以用：\n\n  {{memos}}   选中的笔记正文（带日期）\n  {{count}}   笔记条数\n  {{tags}}    涉及的标签数\n  {{range}}   范围描述\n\n存盘后重开这个窗口就能看到新卡片。';
 };
 
-/* ---------------- 无边框桌面外壳（WebView2）：窗口按钮由页面驱动 ---------------- */
-const shellHost = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
-if (shellHost) {
+/* ---------------- 桌面壳（Electron）：窗口按钮由页面驱动 ---------------- */
+const shellBridge = (() => {
+  if (window.__shell) {
+    return {
+      post: (a) => { try { window.__shell.post(a); } catch (e) { /* 忽略 */ } },
+      onState: (fn) => { try { window.__shell.onState((s) => fn(!!(s && s.max))); } catch (e) { /* 忽略 */ } },
+    };
+  }
+  if (window.chrome && window.chrome.webview) {
+    return {
+      post: (a) => { try { window.chrome.webview.postMessage({ type: 'win', action: a }); } catch (e) { /* 忽略 */ } },
+      onState: (fn) => window.chrome.webview.addEventListener('message', (e) => {
+        const d = e.data || {};
+        if (d.type === 'shell') fn(!!d.max);
+      }),
+    };
+  }
+  return null;
+})();
+
+if (shellBridge) {
   document.body.classList.add('shell');
-  const winSend = (action) => { try { shellHost.postMessage({ type: 'win', action }); } catch (e) { /* 忽略 */ } };
-  let shellMax = false;
   const applyMaxGlyph = (v) => {
     const b = document.querySelector('[data-win="max"]');
     if (b) b.textContent = v ? '\u2750' : '\u25A1';
@@ -1525,54 +1541,13 @@ if (shellHost) {
   const box = $('#win-controls');
   if (box) {
     box.hidden = false;
-    box.querySelector('[data-win="min"]').onclick = () => winSend('minimize');
-    box.querySelector('[data-win="max"]').onclick = () => { shellMax = !shellMax; applyMaxGlyph(shellMax); winSend('maximize'); };
-    box.querySelector('[data-win="close"]').onclick = () => winSend('close');
+    box.querySelector('[data-win="min"]').onclick = () => shellBridge.post('minimize');
+    box.querySelector('[data-win="max"]').onclick = () => shellBridge.post('maximize');
+    box.querySelector('[data-win="close"]').onclick = () => shellBridge.post('close');
   }
-  // 边缘缩放 / 顶部拖动：页面自己判定，再把命中码交给宿主窗口
-  // （WebView2 覆盖整个客户区，宿主的 WM_NCHITTEST 收不到，只能从页面发起）
-  const EDGE = 6, DRAG_H = 10;
-  const NOT_DRAG = 'button, input, textarea, a, select, .tag, .pop, .chip, .memo, .composer';
-  const inDragZone = (el) => {
-    if (!el || !el.closest) return false;
-    if (el.closest(NOT_DRAG)) return false;
-    return !!(el.closest('.topbar') || el.closest('.brand') || el.closest('.day-sep') || el.closest('.list-head'));
-  };
-  const hitFor = (x, y, w, h) => {
-    if (y <= EDGE) return x <= EDGE ? 13 : (x >= w - EDGE ? 14 : 12);
-    if (y >= h - EDGE) return x <= EDGE ? 16 : (x >= w - EDGE ? 17 : 15);
-    if (x <= EDGE) return 10;
-    if (x >= w - EDGE) return 11;
-    return 0;
-  };
-  const CURSORS = { 10: 'ew-resize', 11: 'ew-resize', 12: 'ns-resize', 15: 'ns-resize', 13: 'nwse-resize', 17: 'nwse-resize', 14: 'nesw-resize', 16: 'nesw-resize' };
-  document.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    const ht = hitFor(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
-    if (ht) { e.preventDefault(); winSend('hit:' + ht); return; }
-    if (e.clientY <= DRAG_H || inDragZone(e.target)) { e.preventDefault(); winSend('drag'); }
-  }, true);
-  document.addEventListener('mousemove', (e) => {
-    const ht = hitFor(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
-    const cur = CURSORS[ht] || '';
-    if (document.body.style.cursor !== cur) document.body.style.cursor = cur;
-  }, true);
-  document.addEventListener('dblclick', (e) => {
-    if (e.clientY <= DRAG_H || inDragZone(e.target)) {
-      e.preventDefault();
-      shellMax = !shellMax;
-      applyMaxGlyph(shellMax);
-      winSend('maximize');
-    }
-  }, true);
-  shellHost.addEventListener('message', (e) => {
-    const d = e.data || {};
-    if (d.type !== 'shell') return;
-    shellMax = !!d.max;
-    applyMaxGlyph(shellMax);
-  });
+  // 拖动 / 双击最大化 / 缩放 / 光标全部由壳（-webkit-app-region + 系统窗口）处理
+  shellBridge.onState(applyMaxGlyph);
 }
-
 /* ---------------- 启动 ---------------- */
 (async function boot() {
   await refreshBootstrap();

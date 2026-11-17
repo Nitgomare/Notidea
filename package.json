@@ -1,0 +1,13 @@
+{
+  "name": "flomo-local",
+  "version": "1.4.0",
+  "private": true,
+  "description": "本地优先的卡片笔记（Node 服务 + Electron 桌面壳）",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "45.0.0"
+  }
+}

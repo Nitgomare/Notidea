@@ -24,9 +24,11 @@ PORT=8080 node server.js
 
 **桌面版（独立窗口，像 flomo 那样）**：双击 `start-desktop.cmd`，或桌面上的 **flomo local** 快捷方式。
 
-Windows 上现在走**无边框 WebView2 外壳**（`desktop/shell/FlomoShell.exe`）：没有系统标题栏，页面直接铺满窗口，四角是圆角（Win11 用 DWM 的正圆弧，带抗锯齿），窗口按钮（— □ ✕）画在页面右上角，拖动顶部 16px 可以移窗，四边 5px 可缩放，双击顶部切换最大化，窗口大小/位置记在 `data/shell-window.json`。
+Windows 上走 **Electron 壳**（`flomo-local.exe` + `electron/main.js`）：没有系统标题栏，页面直接铺满窗口；拖动、缩放、双击最大化、边缘光标全部由 Electron / 系统处理；窗口按钮（— □ ✕）画在页面顶栏右侧，最大化时形状会变。窗口大小/位置记在 `data/shell-window.json`。
 
-如果 WebView2 运行时缺失或外壳启动失败（退出码非 0），launcher 会自动回退到 Edge 的应用窗口模式（`--app`，和 WebView2 同一个内核）：没有地址栏、没有标签页，是一个 1220×860 的独立窗口，自己会拉起本地服务。**不内置 Electron 运行时**；如果连 Edge 都没有，退回浏览器打开。
+没有 Electron 运行时（比如从源码跑、没装依赖）时，`start-desktop.cmd` 会回退到 Edge 的应用窗口模式（`--app`）：没有地址栏、没有标签页，自己会拉起本地服务；连 Edge 都没有就退回默认浏览器。
+
+从源码跑桌面版需要先装依赖：`npm install`（会下载 Electron 运行时），然后 `npm start`。
 
 桌面快捷方式由 `tools/make-shortcut.ps1` 生成：它会去注册表读**真实的桌面路径**（有的机器把「桌面」重定向到 D 盘），再在那里建 `flomo local.lnk`，旧位置残留的会一并删掉。桌面被搬走后重跑一次即可。
 
