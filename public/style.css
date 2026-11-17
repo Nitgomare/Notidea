@@ -8,8 +8,8 @@
   --line: #e3e3ee;
   --line-2: #ececf3;
   --accent: #6255d9;
-  --accent-2: #14c3a2;
-  --accent-3: #ff6fb1;
+  --accent-2: #6255d9;
+  --accent-3: #6255d9;
   --accent-soft: #eeecfa;
   --accent-ink: #4b3fbd;
   --lime: #d6ff3d;
@@ -1527,13 +1527,74 @@ body.shell .day-sep button { -webkit-app-region: no-drag; }
 .update-dialog h3 b { font-family: inherit; color: var(--accent); }
 #up-status { min-height: 16px; margin: 2px 0 4px; }
 
-/* ---------- 品牌区：设计稿的「开口 n」标记 + 拾念 + notidea ---------- */
+/* 品牌与交互精修：静止时安静，动作发生时反馈。 */
+:root {
+  --motion-fast: 160ms;
+  --motion-open: 320ms;
+  --motion-settle: cubic-bezier(.2, .8, .2, 1);
+  --grad: linear-gradient(135deg, #6255d9, #7466e2);
+  --grad-soft: linear-gradient(135deg, #eeecfa, #f5f3ff);
+}
+.brand { gap: 10px; padding: 4px 2px 8px; }
 .brand-logo {
-  width: 26px; height: 26px; display: inline-flex; align-self: center;
-  color: var(--accent); margin-right: 2px;
+  width: 42px; height: 42px; flex: 0 0 42px; display: inline-flex;
+  align-self: center; color: #fff; background: var(--accent); border-radius: 13px;
+  transition: transform var(--motion-open) var(--spring), background-color var(--motion-fast);
 }
 .brand-logo svg { width: 100%; height: 100%; }
-.brand-suffix {
-  background: var(--accent-soft); color: var(--accent);
-  text-transform: lowercase; letter-spacing: 1.2px;
+.brand:hover .brand-logo { transform: rotate(-6deg) scale(1.06); }
+.brand-mark { color: var(--ink); background: none; animation: none; font-size: 24px; font-weight: 650; letter-spacing: -.5px; }
+.brand-suffix { background: none; padding: 0; color: var(--muted); text-transform: lowercase; letter-spacing: .3px; font-size: 12px; font-weight: 500; transform: none; }
+.brand .icon-btn { flex-shrink: 0; }
+.sidebar { background: #f8f8fc; border-right: .5px solid var(--line); box-shadow: none; }
+.side-foot { background: #f8f8fc; box-shadow: none; }
+.heat-stats div { background: transparent; border: 0; padding-inline: 6px; }
+.heat-stats div:hover { transform: none; box-shadow: none; }
+.heat-stats b, .nav-item em { font-variant-numeric: tabular-nums; }
+.heat-stats span, .heat-months span, .heat .heat-head span,
+.memo-time, .memo-words, .mention-item small, .foot .gh-link { font-size: 12px; }
+.heat-cell.day.today::after { display: none; }
+.heat-cell.day:hover { transform: scale(1.3); box-shadow: none; }
+.heat-tip b { color: #e1dcff; }
+.nav-item.active, .subnav a.active, .tag-row.active { background: var(--accent-soft); box-shadow: none; }
+.nav-item.active::before, .tag-row.active::before { display: none; }
+.tag-row:focus-within .tag-more { opacity: 1; }
+.new-btn, .primary-btn { background: var(--accent); box-shadow: none; }
+.new-btn:hover, .primary-btn:hover { background: var(--accent-ink); box-shadow: none; transform: translateY(-2px); }
+.new-btn::after, .primary-btn::after { display: none; }
+button:not(.win-controls button), .nav-item, .subnav a {
+  transition: transform var(--motion-fast) var(--motion-settle), background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), opacity var(--motion-fast);
+}
+button:not(:disabled):not(.win-controls button):active { transform: scale(.94); }
+button:disabled { cursor: default; }
+:where(button, a, input, textarea, select, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.memo, .memo:hover { border-width: .5px; background: var(--card); box-shadow: none; transform: none; }
+.memo:hover { border-color: #c8c1e8; }
+.memo::before { display: none; }
+.memo.pinned { background: var(--card); border-left-color: var(--line-2); }
+.memo.pinned::after { font-size: 12px; color: var(--muted); background: var(--paper-2); box-shadow: none; border: .5px solid var(--line); }
+.memo-back { background: var(--accent-soft); color: var(--accent-ink); }
+.memo-actions .memo-ai { background: var(--paper-2); }
+.memo.enter { animation-duration: 360ms; animation-delay: min(calc(var(--d, 0) * 35ms), 210ms); }
+.memo.born { animation-duration: 460ms; }
+.composer { box-shadow: none; border-width: .5px; }
+.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pop:not([hidden]):not(.closing), .tag-menu, .memo-menu { animation: surfaceIn var(--motion-open) var(--motion-settle); }
+@keyframes surfaceIn { from { opacity: 0; transform: translateY(-10px) scale(.96); } to { opacity: 1; transform: none; } }
+.dialog[open] { animation: dialogEnter 320ms var(--motion-settle); }
+@keyframes dialogEnter { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+.subnav { transition: max-height 360ms var(--motion-settle), opacity 200ms, visibility 360ms; }
+.subnav.closed { visibility: hidden; }
+.acc { transition-duration: 320ms; }
+.acc:not(.open) { visibility: hidden; }
+.acc.open { visibility: visible; }
+@media (hover: none) {
+  .memo-actions .memo-ai, .tag-more { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .brand:hover .brand-logo, .heat-cell.day:hover, button:active { transform: none !important; }
+}
+[data-reduce-motion="true"] *, [data-reduce-motion="true"] *::before, [data-reduce-motion="true"] *::after {
+  animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important;
 }

@@ -1,91 +1,123 @@
-"""生成 拾念 / Notidea 图标：设计稿的紫色圆角方块 + 白色「开口 n」标记
-
-几何来自 design/notidea/notidea-app-icon.svg：
-  <rect width="512" height="512" rx="116" fill="#6255D9"/>
-  <path d="M160 354V226C160 120 336 120 336 226M336 288V354"
-        stroke="#FFFFFF" stroke-width="48" stroke-linecap="round"/>
-"""
-import os
+"""Generate every Notidea icon and design asset from one path definition."""
+from pathlib import Path
 import math
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-OUT = os.path.join(os.path.dirname(__file__), '..', 'assets')
-PUB = os.path.join(os.path.dirname(__file__), '..', 'public')
-os.makedirs(OUT, exist_ok=True)
-os.makedirs(PUB, exist_ok=True)
-
-IRIS = (98, 85, 217, 255)      # #6255D9
-SIZE = 1024
-SS = 4                          # 超采样倍数
-W = 48.0 / 512 * SIZE           # 笔画宽度（按设计稿等比）
-RADIUS = 116.0 / 512 * SIZE
-
-
-def mark_points(step=120):
-    """按 SVG 路径采样中心线：竖线 -> 三次贝塞尔 -> 短竖线"""
-    def sc(x, y):
-        return (x / 512.0 * SIZE, y / 512.0 * SIZE)
-
-    def lerp(a, b, n):
-        return [sc(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1)]
-
-    pts = lerp((160, 354), (160, 226), step // 4)      # 竖线也要细分，否则盖章只有两端
-    for i in range(1, step + 1):
-        t = i / step
-        u = 1 - t
-        x = u**3 * 160 + 3 * u * u * t * 160 + 3 * u * t * t * 336 + t**3 * 336
-        y = u**3 * 226 + 3 * u * u * t * 120 + 3 * u * t * t * 120 + t**3 * 226
-        pts.append(sc(x, y))
-    return pts, lerp((336, 288), (336, 354), step // 8)
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / 'assets'
+PUB = ROOT / 'public'
+DESIGN = ROOT / 'design' / 'notidea'
+IRIS = '#6255D9'
+STROKE = 64
+RADIUS = 116
+# 512-unit centerline; round caps leave a 44-unit visible interruption.
+SEGMENTS = (
+    ('M', 120, 380), ('V', 220),
+    ('C', 120, 84, 392, 84, 392, 220),
+    ('M', 392, 328), ('V', 380),
+)
+PATH = ''.join(command + ' '.join(map(str, values)) for command, *values in SEGMENTS)
+ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 
 
-def draw_mark(d, color, scale=1.0):
-    pts, tail = mark_points()
-    w = max(1, round(W * scale))
-    d.line(pts, fill=color, width=w, joint='curve')
-    # 每段两端的圆头
-    for cx, cy in (pts[0], pts[-1], tail[0], tail[1]):
-        r = w / 2.0
-        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color)
-    d.line(tail, fill=color, width=w)
+def mark_points():
+    """Sample the very same commands exported to SVG, at sub-unit spacing."""
+    sections = []
+    current = None
+    for command, *values in SEGMENTS:
+        if command == 'M':
+            current = tuple(values)
+            sections.append([current])
+        elif command == 'V':
+            end = (current[0], values[0])
+            steps = max(1, math.ceil(abs(end[1] - current[1]) * 2))
+            sections[-1].extend((current[0], current[1] + (end[1] - current[1]) * i / steps)
+                                for i in range(1, steps + 1))
+            current = end
+        elif command == 'C':
+            start = current
+            x1, y1, x2, y2, x3, y3 = values
+            for i in range(1, 1025):
+                t = i / 1024
+                u = 1 - t
+                sections[-1].append((u**3 * start[0] + 3*u*u*t*x1 + 3*u*t*t*x2 + t**3*x3,
+                                     u**3 * start[1] + 3*u*u*t*y1 + 3*u*t*t*y2 + t**3*y3))
+            current = (x3, y3)
+    return sections
 
 
-def render(bg=None, mark_color=(255, 255, 255, 255), radius=RADIUS):
-    """bg 为 None 时输出透明底（用于纯标记）"""
-    s = SIZE * SS
-    img = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
+def render(size=1024, bg=IRIS, color='#FFFFFF'):
+    # Render each small size directly rather than repeatedly downsampling.
+    supersample = 4
+    side = size * supersample
+    scale = side / 512
+    image = Image.new('RGBA', (side, side))
+    draw = ImageDraw.Draw(image)
     if bg is not None:
-        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=round(radius * SS), fill=bg)
-    # 标记按 512 坐标系等比放大
-    pts, tail = mark_points(400)
-    k = SS
-    w = max(1, round(W * k))
-    r = w / 2.0
-    # 沿中心线密集盖章（Pillow 的多段线在急转弯处会有尖刺）
-    for seg in (pts, tail):
-        for (x, y) in seg:
-            cx, cy = x * k, y * k
-            d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=mark_color)
-    return img.resize((SIZE, SIZE), Image.LANCZOS)
+        draw.rounded_rectangle((0, 0, side - 1, side - 1), radius=RADIUS * scale, fill=bg)
+    radius = STROKE * scale / 2
+    for section in mark_points():
+        for x, y in section:
+            cx, cy = x * scale, y * scale
+            draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=color)
+    return image.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def svg(background=False):
+    tile = f'<rect width="512" height="512" rx="{RADIUS}" fill="{IRIS}"/>' if background else ''
+    color = '#FFFFFF' if background else IRIS
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">{tile}'
+            f'<path d="{PATH}" fill="none" stroke="{color}" stroke-width="{STROKE}" '
+            'stroke-linecap="round" stroke-linejoin="round"/></svg>\n')
+
+
+def preview():
+    image = Image.new('RGB', (1200, 720), '#FAFAFD')
+    draw = ImageDraw.Draw(image)
+    def text(xy, value, size=22, color='#77738E'):
+        try:
+            font = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', size)
+        except OSError:
+            font = ImageFont.load_default(size=size)
+        draw.text(xy, value, font=font, fill=color)
+    draw.rectangle((0, 0, 1199, 489), fill='#EEECFA')
+    text((48, 30), 'Notidea / An unfinished n', 25)
+    app = render(336)
+    image.paste(app, (72, 104), app)
+    text((480, 145), 'notidea', 82, '#25233D')
+    text((488, 260), 'Before it\u2019s an idea.', 28)
+    text((488, 337), 'Iris #6255D9  /  stroke 64  /  open gap 44', 20)
+    text((48, 516), 'Actual pixel sizes', 20)
+    x = 48
+    for size in (16, 20, 24, 32, 48, 64):
+        icon = render(size)
+        image.paste(icon, (x, 570), icon)
+        text((x, 650), str(size), 16)
+        x += size + 38
+    for x, background, color in ((720, '#FAFAFD', IRIS), (930, '#25233D', '#FFFFFF')):
+        draw.rounded_rectangle((x, 520, x+160, 680), radius=28, fill=background)
+        mark = render(160, bg=None, color=color)
+        image.paste(mark, (x, 520), mark)
+    image.save(DESIGN / 'notidea-logo-preview.png')
 
 
 def main():
-    app = render(bg=IRIS)
-    app.save(os.path.join(OUT, 'icon.png'))
-    app.resize((180, 180), Image.LANCZOS).save(os.path.join(OUT, 'icon-180.png'))
-    app.resize((64, 64), Image.LANCZOS).save(os.path.join(OUT, 'icon-64.png'))
-    app.resize((32, 32), Image.LANCZOS).save(os.path.join(OUT, 'icon-32.png'))
-
-    sizes = [(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48), (64, 64), (128, 128), (256, 256)]
-    app.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, 'notidea.ico'), sizes=sizes)
-
-    app.resize((32, 32), Image.LANCZOS).save(os.path.join(PUB, 'favicon.png'))
-    app.resize((180, 180), Image.LANCZOS).save(os.path.join(PUB, 'apple-touch-icon.png'))
-
-    # 纯标记（给界面内联用，透明底）
-    render(bg=None, mark_color=IRIS).save(os.path.join(OUT, 'mark.png'))
-    print('icons ->', os.path.abspath(OUT))
+    for directory in (OUT, PUB, DESIGN):
+        directory.mkdir(parents=True, exist_ok=True)
+    app = render()
+    app.save(OUT / 'icon.png')
+    app.save(DESIGN / 'notidea-app-icon.png')
+    render(32).save(OUT / 'icon-32.png')
+    frames = [render(size) for size in ICO_SIZES]
+    frames[-1].save(OUT / 'notidea.ico', format='ICO',
+                    sizes=[(size, size) for size in ICO_SIZES], append_images=frames[:-1])
+    render(32).save(PUB / 'favicon.png')
+    render(180).save(PUB / 'apple-touch-icon.png')
+    (DESIGN / 'notidea-mark.svg').write_text(svg(), encoding='utf-8')
+    (DESIGN / 'notidea-app-icon.svg').write_text(svg(background=True), encoding='utf-8')
+    preview()
+    print(f'Generated icons and design assets from {Path(__file__).resolve()}')
+    print(f'Path: {PATH}; stroke={STROKE}; ICO sizes={ICO_SIZES}')
 
 
 if __name__ == '__main__':

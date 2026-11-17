@@ -465,26 +465,34 @@ function openTagEdit(node, focusMove = false) {
   if (focusMove) sel.focus();
 }
 
-$('#btn-te-save').onclick = async (e) => {
-  if (!editingTag) return;
+let tagSaving = false;
+$('#tag-edit form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (!editingTag || tagSaving) return;
   const name = $('#te-name').value.trim().replace(/^#/, '');
   const icon = $('#te-icon').value.trim();
   const parent = $('#te-parent').value;
   if (!name) { e.preventDefault(); toast('标签名不能为空'); return; }
   const leaf = name.split('/').pop();
   const next = parent ? parent + '/' + leaf : name;
+  const tag = editingTag;
+  tagSaving = true;
+  $('#btn-te-save').disabled = true;
   try {
-    if (next !== editingTag.name) {
-      const r = await api('/api/tags/rename', { method: 'POST', body: { from: editingTag.name, to: next } });
+    if (next !== tag.name) {
+      const r = await api('/api/tags/rename', { method: 'POST', body: { from: tag.name, to: next } });
+      tag.name = next;
       applyTags(r);
       await loadMemos();
     }
-    if (icon !== (editingTag.icon || '')) {
+    if (icon !== (tag.icon || '')) {
       const r = await api('/api/tags/meta', { method: 'POST', body: { name: next, icon } });
       applyTags(r);
     }
+    if (editingTag === tag) $('#tag-edit').close();
     toast('标签已更新');
-  } catch (err) { e.preventDefault(); toast(err.message); }
+  } catch (err) { toast(err.message); }
+  finally { tagSaving = false; $('#btn-te-save').disabled = false; }
 };
 
 /* ---------------- 笔记列表 ---------------- */
@@ -538,6 +546,7 @@ function memoNode(m) {
 function renderList() {
   const list = $('#memo-list');
   list.innerHTML = '';
+  $('#btn-more').hidden = !state.hasMore;
   if (!state.memos.length) {
     list.innerHTML = '<div class="empty"><h3>这里还没有文字</h3><p>先写一条，哪怕只有一句话。按 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 保存。</p></div>';
     return;
@@ -661,51 +670,74 @@ function renderListTitle() {
 }
 
 /* ---------------- 数据加载 ---------------- */
+let memoLoadVersion = 0;
+let memoLoading = false;
 async function loadMemos({ append = false } = {}) {
-  const f = state.filter;
-  if (f.type === 'reminders') {
-    const data = await api('/api/reminders');
-    state.reminders = data.reminders || [];
-    $('#stat-reminders').textContent = data.count || 0;
-    renderReminders(data.now);
+  if (append && (memoLoading || !state.hasMore)) return;
+  const version = ++memoLoadVersion;
+  memoLoading = true;
+  $('#btn-more').disabled = true;
+  const offset = append ? state.offset : 0;
+  const f = { ...state.filter };
+  try {
+    if (f.type === 'reminders') {
+      const data = await api('/api/reminders');
+      if (version !== memoLoadVersion) return;
+      state.hasMore = false;
+      $('#btn-more').hidden = true;
+      state.reminders = data.reminders || [];
+      $('#stat-reminders').textContent = data.count || 0;
+      renderReminders(data.now);
+      renderListTitle();
+      return;
+    }
+    const q = new URLSearchParams({ limit: state.limit, offset });
+    if (f.type === 'tag') q.set('tag', f.value);
+    if (f.type === 'day' && f.value) {
+      const [yy, mm, dd] = f.value.split('-').map(Number);
+      q.set('since', String(new Date(yy, mm - 1, dd).getTime()));
+      q.set('until', String(new Date(yy, mm - 1, dd + 1).getTime()));
+    }
+    if (state.search) q.set('search', state.search);
+    const vw = state.view;
+    const hasList = [state.has, ...vw.fhas].filter(Boolean);
+    if (vw.tagMode === 'notags') hasList.push('notags');
+    if (hasList.length) q.set('has', [...new Set(hasList)].join(','));
+    if (vw.order) q.set('order', vw.order);
+    if (vw.source) q.set('source', vw.source);
+    if (vw.onThisDay) q.set('onThisDay', '1');
+    if (vw.tag && vw.tagMode === 'include' && f.type !== 'tag') q.set('tag', vw.tag);
+    if (vw.tag && vw.tagMode === 'exclude') q.set('excludeTag', vw.tag);
+    if (vw.since && !q.has('since')) q.set('since', String(vw.since));
+    if (vw.until && !q.has('until')) q.set('until', String(vw.until));
+    let memos = (await api('/api/memos?' + q.toString())).memos;
+    if (version !== memoLoadVersion) return;
+    const received = memos.length;
+    if (f.type === 'today') {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      memos = memos.filter((m) => m.created_at >= start.getTime());
+    }
+    if (f.type === 'pinned') memos = memos.filter((m) => m.pinned);
+    if (f.type === 'random') {
+      memos = memos.slice().sort(() => Math.random() - 0.5).slice(0, 8);
+      state.hasMore = false;
+    } else {
+      state.hasMore = received === state.limit;
+    }
+    const seen = new Set();
+    state.memos = (append ? state.memos.concat(memos) : memos).filter((memo) => {
+      if (seen.has(memo.id)) return false;
+      seen.add(memo.id);
+      return true;
+    });
+    state.offset = offset + received;
+    renderList();
     renderListTitle();
-    return;
+  } catch (e) {
+    if (version === memoLoadVersion) toast('加载失败：' + e.message);
+  } finally {
+    if (version === memoLoadVersion) { memoLoading = false; $('#btn-more').disabled = false; }
   }
-  const q = new URLSearchParams({ limit: state.limit, offset: append ? state.offset : 0 });
-  if (f.type === 'tag') q.set('tag', f.value);
-  if (f.type === 'day' && f.value) {
-    const [yy, mm, dd] = f.value.split('-').map(Number);
-    q.set('since', String(new Date(yy, mm - 1, dd).getTime()));
-    q.set('until', String(new Date(yy, mm - 1, dd + 1).getTime()));
-  }
-  if (state.search) q.set('search', state.search);
-  const vw = state.view;
-  const hasList = [state.has, ...vw.fhas].filter(Boolean);
-  if (vw.tagMode === 'notags') hasList.push('notags');
-  if (hasList.length) q.set('has', [...new Set(hasList)].join(','));
-  if (vw.order) q.set('order', vw.order);
-  if (vw.source) q.set('source', vw.source);
-  if (vw.onThisDay) q.set('onThisDay', '1');
-  if (vw.tag && vw.tagMode === 'include' && f.type !== 'tag') q.set('tag', vw.tag);
-  if (vw.tag && vw.tagMode === 'exclude') q.set('excludeTag', vw.tag);
-  if (vw.since && !q.has('since')) q.set('since', String(vw.since));
-  if (vw.until && !q.has('until')) q.set('until', String(vw.until));
-  let memos = (await api('/api/memos?' + q.toString())).memos;
-  if (f.type === 'today') {
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    memos = memos.filter((m) => m.created_at >= start.getTime());
-  }
-  if (f.type === 'pinned') memos = memos.filter((m) => m.pinned);
-  if (f.type === 'random') {
-    memos = memos.slice().sort(() => Math.random() - 0.5).slice(0, 8);
-    state.hasMore = false;
-  } else {
-    state.hasMore = memos.length === state.limit;
-  }
-  state.memos = append ? state.memos.concat(memos) : memos;
-  state.offset = state.memos.length;
-  renderList();
-  renderListTitle();
 }
 
 async function refreshBootstrap() {
@@ -841,6 +873,7 @@ async function memoAction(act, card) {
     };
     ta.addEventListener('blur', () => done(true));
     ta.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
       if (e.key === 'Escape') { e.preventDefault(); done(false); }
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); done(true); }
     });
@@ -905,6 +938,7 @@ async function memoAction(act, card) {
 
 /* 批注输入框回车发送 */
 document.getElementById('memo-list').addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   if (e.key === 'Enter' && e.target.matches('.comment-input input')) {
     e.preventDefault();
     sendComment(e.target.closest('.memo'));
@@ -956,8 +990,14 @@ draft.addEventListener('paste', (e) => {
   if (ev === 'drop' && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 }));
 
+let memoSaving = false;
 async function saveMemo() {
-  const content = draft.value.trim();
+  if (memoSaving) return;
+  const original = draft.value;
+  const files = state.pendingFiles.slice();
+  const remind = draftRemind;
+  const viewSnapshot = JSON.stringify([state.filter, state.has, state.search, state.view]);
+  const content = original.trim();
   if (!content && !state.pendingFiles.length) { toast('写点什么再保存'); return; }
   const body = { content: content || '（附件）' };
   if (state.pendingFiles.length) body.files = state.pendingFiles.map(({ name, mime, dataBase64 }) => ({ name, mime, dataBase64 }));
@@ -966,27 +1006,34 @@ async function saveMemo() {
     body.calendar = draftRemind.calendar;
     body.remindNote = '⏰ ' + (content.replace(/\s+/g, ' ').slice(0, 40) || '提醒');
   }
-  const { memo, stats, tags, tagTree, heatmap } = await api('/api/memos', { method: 'POST', body });
-  const hadRemind = !!draftRemind.at;
-  setDraftRemind(0, false);
-  if (hadRemind) refreshReminderCount();
-  draft.value = '';
-  state.pendingFiles = [];
-  renderPending();
-  updateHint();
-  state.stats = stats;
-  applyTags({ tags, tagTree, heatmap });
-  state.filter = { type: 'all' };
-  state.has = '';
-  bornMemoId = memo && memo.id;
-  await loadMemos();
-  replayClass($('#composer'), 'saved');
-  toast('已保存到本地');
-  return memo;
+  memoSaving = true;
+  $('#btn-save').disabled = true;
+  try {
+    const { memo, stats, tags, tagTree, heatmap } = await api('/api/memos', { method: 'POST', body });
+    if (draftRemind === remind) setDraftRemind(0, false);
+    if (remind.at) refreshReminderCount();
+    if (draft.value === original) draft.value = '';
+    state.pendingFiles = state.pendingFiles.filter((file) => !files.includes(file));
+    renderPending();
+    updateHint();
+    state.stats = stats;
+    applyTags({ tags, tagTree, heatmap });
+    if (viewSnapshot === JSON.stringify([state.filter, state.has, state.search, state.view])) {
+      state.filter = { type: 'all' };
+      state.has = '';
+    }
+    bornMemoId = memo && memo.id;
+    await loadMemos();
+    replayClass($('#composer'), 'saved');
+    toast('已保存到本地');
+    return memo;
+  } catch (e) { toast('保存失败：' + e.message); }
+  finally { memoSaving = false; $('#btn-save').disabled = false; }
 }
 $('#btn-save').onclick = saveMemo;
-$('#btn-new').onclick = () => { draft.focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+$('#btn-new').onclick = () => { draft.focus({ preventScroll: true }); $('#composer').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
 draft.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveMemo(); }
 });
 
@@ -1003,6 +1050,7 @@ $('#search').addEventListener('input', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   const key = e.key.toLowerCase();
   const mod = e.ctrlKey || e.metaKey;
 
@@ -1029,17 +1077,32 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Esc：先关弹窗，再清搜索
+  // Esc 每次只关闭最上层，阻止浏览器再次关闭底层 dialog。
   if (e.key === 'Escape') {
+    const consume = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+    const openDialog = document.activeElement?.closest('dialog[open]') || [...document.querySelectorAll('dialog[open]')].pop();
+    const menus = [...document.querySelectorAll('.pop, #tag-menu, #memo-menu')].filter((el) => !el.hidden && !el.classList.contains('closing') && (!openDialog || openDialog.contains(el)));
+    const menu = menus.pop();
+    if (menu) {
+      consume();
+      menu.hidden = true;
+      $('#btn-view').classList.remove('open');
+      const anchor = { 'view-pop': '#btn-view', 'filter-pop': '#btn-filter', 'search-pop': '#search', 'mention-pop': '#draft', 'remind-pop': '#btn-remind' }[menu.id];
+      if (anchor && document.activeElement !== $(anchor)) $(anchor).focus();
+      return;
+    }
+    if (openDialog) { consume(); openDialog.close(); return; }
     if (APP().classList.contains('side-open') || APP().classList.contains('rail-open')) {
       APP().classList.remove('side-open');
       APP().classList.remove('rail-open');
       syncScrim();
+      consume();
       return;
     }
-    const openDialog = [...document.querySelectorAll('dialog[open]')].pop();
-    if (openDialog) { openDialog.close(); return; }
+    if (document.body.classList.contains('select-mode')) { consume(); exitSelect(); return; }
     if (document.activeElement === $('#search')) {
+      consume();
+      clearTimeout(searchTimer);
       $('#search').value = '';
       state.search = '';
       loadMemos();
@@ -1131,21 +1194,33 @@ if (btnExpand) {
 syncSideExpand();
 
 let currentAi = { skill: null, text: '', payload: {} };
+let aiController = null;
+function cancelAi() {
+  if (aiController) aiController.abort();
+  aiController = null;
+  $('#rail-body').classList.remove('streaming');
+}
 
 async function runAi(skill, payload = {}) {
   if (!state.llm.hasKey) { toast('先到设置里填模型 API Key'); $('#btn-settings').click(); return; }
+  cancelAi();
+  const controller = new AbortController();
+  aiController = controller;
+  const result = { skill, text: '', payload };
   const body = $('#rail-body');
   const paint = makeMdPainter(body);
   body.classList.remove('streaming');
   body.innerHTML = '<p class="thinking muted small">思考中<i></i><i></i><i></i></p>';
   $('#btn-ai-save').hidden = true;
-  currentAi = { skill, text: '', payload };
+  currentAi = result;
   try {
     const res = await fetch('/api/ai/' + skill, {
+      signal: controller.signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (aiController !== controller) return;
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'HTTP ' + res.status);
@@ -1157,6 +1232,7 @@ async function runAi(skill, payload = {}) {
     let buf = '';
     while (true) {
       const { value, done } = await reader.read();
+      if (aiController !== controller) { await reader.cancel(); return; }
       if (done) break;
       buf += dec.decode(value, { stream: true });
       const parts = buf.split('\u000a\u000a');
@@ -1175,10 +1251,12 @@ async function runAi(skill, payload = {}) {
     paint(currentAi.text, true);
     body.classList.remove('streaming');
     $('#btn-ai-save').hidden = !currentAi.text;
+    return result;
   } catch (e) {
+    if (aiController !== controller || controller.signal.aborted) return;
     body.classList.remove('streaming');
     body.innerHTML = '<p class="muted small">生成失败：' + escapeHtml(e.message) + '</p>';
-  }
+  } finally { if (aiController === controller) aiController = null; }
 }
 
 /* 右侧面板默认是「跟 AI 对话」：打开时若没有激活的 chip，就选 ask */
@@ -1203,6 +1281,7 @@ let railSeed = '';
 let railHistory = [];
 
 function railReset(seed = '') {
+  cancelAi();
   railSeed = seed || '';
   railHistory = [];
 }
@@ -1219,13 +1298,16 @@ async function askAi(q) {
   if (parts.length) payload = parts.join('\n\n') + '\n\n【新问题】' + question;
   railHistory.push({ role: 'user', text: question });
   $('#ask-input').value = '';
-  await runAi('ask', { question: payload });
-  if (currentAi.text) railHistory.push({ role: 'ai', text: currentAi.text.slice(0, 1500) });
+  const history = railHistory;
+  const result = await runAi('ask', { question: payload });
+  if (result && result === currentAi && history === railHistory && result.text) history.push({ role: 'ai', text: result.text.slice(0, 1500) });
 }
 
 $('#rail-tabs').addEventListener('click', (e) => {
   const chip = e.target.closest('.chip');
   if (!chip) return;
+  cancelAi();
+  currentAi = { skill: null, text: '', payload: {} };
   $('#rail-tabs').querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
   chip.classList.add('active');
   state.aiSkill = chip.dataset.ai;
@@ -1425,18 +1507,27 @@ $('#btn-data-open').onclick = async () => {
     toast('打不开：' + e.message);
   }
 };
-$('#btn-cfg-save').onclick = async () => {
-  await api('/api/config', {
-    method: 'POST',
-    body: {
-      baseUrl: $('#cfg-base').value,
-      model: $('#cfg-model').value,
-      apiKey: $('#cfg-key').value,
-      temperature: Number($('#cfg-temp').value),
-    },
-  });
-  await refreshBootstrap();
-  toast('已保存模型配置');
+let configSaving = false;
+$('#settings form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (configSaving) return;
+  configSaving = true;
+  $('#btn-cfg-save').disabled = true;
+  try {
+    await api('/api/config', {
+      method: 'POST',
+      body: {
+        baseUrl: $('#cfg-base').value,
+        model: $('#cfg-model').value,
+        apiKey: $('#cfg-key').value,
+        temperature: Number($('#cfg-temp').value),
+      },
+    });
+    await refreshBootstrap();
+    $('#settings').close();
+    toast('已保存模型配置');
+  } catch (err) { toast('配置保存失败：' + err.message); }
+  finally { configSaving = false; $('#btn-cfg-save').disabled = false; }
 };
 const btnExport = $('#btn-export');
 if (btnExport) btnExport.onclick = () => { window.location.href = '/api/export'; };
@@ -1886,20 +1977,29 @@ function renderComments(list, comments) {
   });
 }
 
+const commentSaving = new Set();
 async function sendComment(card) {
   const id = Number(card.dataset.id);
+  if (commentSaving.has(id)) return;
   const box = card.querySelector('.comment-box');
   const input = box.querySelector('input');
-  const text = input.value.trim();
+  const original = input.value;
+  const text = original.trim();
   if (!text) return;
-  const { comment, memo } = await api('/api/memos/' + id + '/comments', { method: 'POST', body: { content: text } });
-  input.value = '';
-  if (memo) {
-    const cur = state.memos.find((m) => m.id === id);
-    if (cur) cur.comments = memo.comments;
-  }
-  await loadComments(card);
-  toast('批注已保存');
+  const button = box.querySelector('[data-act="comment-send"]');
+  commentSaving.add(id);
+  button.disabled = true;
+  try {
+    const { memo } = await api('/api/memos/' + id + '/comments', { method: 'POST', body: { content: text } });
+    if (input.value === original) input.value = '';
+    if (memo) {
+      const cur = state.memos.find((m) => m.id === id);
+      if (cur) cur.comments = memo.comments;
+    }
+    await loadComments(card);
+    toast('批注已保存');
+  } catch (e) { toast('批注保存失败：' + e.message); }
+  finally { commentSaving.delete(id); button.disabled = false; }
 }
 
 /* ---------------- 单条笔记模式（?memo=id / ?memo=id&float=1） ---------------- */
@@ -2228,7 +2328,7 @@ $('#search').addEventListener('blur', () => {
 });
 $('#search').addEventListener('input', () => { if ($('#search').value) popClose($('#search-pop')); else popOpen($('#search-pop')); }, true);
 $('#search').addEventListener('keydown', (e) => {
-  if (e.key === 'Tab') { e.preventDefault(); setSearchMode(state.searchMode === 'kw' ? 'ai' : 'kw'); return; }
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   if (e.key === 'Enter') {
     const q = $('#search').value.trim();
     if (!q) return;
@@ -2243,13 +2343,13 @@ $('#search').addEventListener('keydown', (e) => {
     }
   }
 });
-$('#search-mode').addEventListener('mousedown', (e) => {
+$('#search-mode').addEventListener('click', (e) => {
   const b = e.target.closest('[data-mode]');
   if (!b) return;
   e.preventDefault();
   setSearchMode(b.dataset.mode);
 });
-$('#search-pop').addEventListener('mousedown', (e) => {
+$('#search-pop').addEventListener('click', (e) => {
   e.preventDefault();
   const quick = e.target.closest('[data-quick]');
   if (quick) {
@@ -2318,7 +2418,7 @@ $('#filter-pop').addEventListener('click', (e) => {
     v.tagMode = v.tagMode === tm.dataset.tagmode ? '' : tm.dataset.tagmode;
     if (v.tagMode === 'notags' || !v.tagMode) v.tag = '';
     syncFilterPop();
-    if (v.tagMode === 'include' || v.tagMode === 'exclude') { $('#flt-tag').focus(); if (!v.tag) return; }
+    if (v.tagMode === 'include' || v.tagMode === 'exclude') { $('#flt-tag').focus(); }
   }
   const fh = e.target.closest('[data-fhas]');
   if (fh) { const k = fh.dataset.fhas; v.fhas = v.fhas.includes(k) ? v.fhas.filter((x) => x !== k) : [...v.fhas, k]; }
@@ -2327,7 +2427,7 @@ $('#filter-pop').addEventListener('click', (e) => {
   if (e.target.closest('#btn-filter-clear')) {
     Object.assign(v, { source: '', since: 0, until: 0, range: '', tagMode: '', tag: '', fhas: [], onThisDay: false });
   }
-  if (r || fh || fs || e.target.closest('#btn-filter-clear')) { syncFilterPop(); syncViewPop(); loadMemos(); }
+  if (r || tm || fh || fs || e.target.closest('#btn-filter-clear')) { syncFilterPop(); syncViewPop(); loadMemos(); }
 });
 $('#flt-tag').onchange = () => { state.view.tag = $('#flt-tag').value; loadMemos(); };
 ['#flt-since', '#flt-until'].forEach((s) => $(s).addEventListener('change', () => {
@@ -2412,6 +2512,7 @@ function pickMention(slug) {
 }
 $('#mention-q').addEventListener('input', () => { clearTimeout(mentionTimer); mentionTimer = setTimeout(() => fillMention($('#mention-q').value.trim()), 160); });
 $('#mention-q').addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   const items = [...document.querySelectorAll('#mention-list .mention-item')];
   const idx = items.findIndex((x) => x.classList.contains('on'));
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -2490,6 +2591,7 @@ $('#sel-del').onclick = async () => {
 };
 $('#sel-done').onclick = exitSelect;
 document.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   if (e.key === 'Escape' && document.body.classList.contains('select-mode')) exitSelect();
 });
 

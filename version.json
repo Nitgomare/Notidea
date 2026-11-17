@@ -1,6 +1,6 @@
 {
-  "version": "2.3.1",
-  "notes": "修复：启动时窗口偶尔隐藏（补 show 兜底 + 校验上次的窗口坐标）",
+  "version": "3.0.0",
+  "notes": "3.0：全新精修 Logo、统一视觉与交互动效；修复重复保存、草稿丢失、搜索竞态、弹窗保存和键盘交互；精简冗余资源。",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }

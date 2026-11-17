@@ -1,6 +1,6 @@
 {
   "name": "notidea",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "description": "拾念（Notidea）· 本地优先的卡片笔记",
   "main": "electron/main.js",
