@@ -396,6 +396,25 @@ mark { background: #f6e3a8; color: inherit; padding: 0 1px; border-radius: 3px; 
   border-radius: 12px; padding: 16px 18px;
 }
 .insight-result-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; }
+
+/* AI 输出按 Markdown 渲染：块级样式。放在 .insight-result-body 之后，覆盖 pre-wrap */
+.md { white-space: normal; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 9px; }
+.md h1, .md h2, .md h3, .md h4 { margin: 15px 0 8px; line-height: 1.5; font-family: Georgia, "Songti SC", serif; }
+.md h1 { font-size: 18px; }
+.md h2 { font-size: 16.5px; }
+.md h3 { font-size: 15px; }
+.md h4 { font-size: 14px; }
+.md ul, .md ol { margin: 0 0 10px; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.md blockquote { margin: 10px 0; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.md pre { margin: 10px 0; padding: 10px 12px; background: var(--paper); border: 1px solid var(--line-2); border-radius: 10px; overflow-x: auto; }
+.md pre code { background: none; border: 0; padding: 0; }
+.md strong { font-weight: 700; }
+.md a { color: var(--accent); }
 .history-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .history-item {
   text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 10px;

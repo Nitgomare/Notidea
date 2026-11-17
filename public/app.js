@@ -78,8 +78,7 @@ function dayLabel(ms) {
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /** 先转义，再处理 #标签 / [[链接]] / 粗体 / 行内代码 / URL；不把用户内容当 HTML 执行 */
-function renderContent(text, highlight = '') {
-  let html = escapeHtml(text);
+function renderContent(text, highlight = '') {  let html = escapeHtml(text);
 
   // [[链接]]：手工扫描，避免正则转义问题
   let out = '';
@@ -105,6 +104,74 @@ function renderContent(text, highlight = '') {
     html = html.replace(new RegExp('(' + safe + ')', 'gi'), '<mark>$1</mark>');
   }
   return html;
+}
+
+/* ---------------- Markdown 渲染（AI 输出用） ----------------
+   先整体转义，再按行组装块级结构；行内只认 **粗体** / *斜体* / `代码` / 链接 / #标签 */
+function inlineMd(text) {
+  let s = escapeHtml(text);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/(https?:\/\/[^\s<>"]+)/g, '<a href="$1" target="_blank" rel="noreferrer">$1</a>');
+  s = s.replace(/#([^<>\s#，。！？、；：,.!?;:()（）\[\]【】]+)/g, '<span class="tag" data-tag="$1">#$1</span>');
+  return s;
+}
+
+function renderMarkdown(src) {
+  const lines = String(src || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let list = '';
+  let inCode = false;
+  let codeBuf = [];
+  const closeList = () => { if (list) { out.push('</' + list + '>'); list = ''; } };
+  const flushCode = () => { out.push('<pre><code>' + escapeHtml(codeBuf.join('\n')) + '</code></pre>'); codeBuf = []; };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (/^\s*```/.test(line)) {
+      closeList();
+      if (inCode) { flushCode(); inCode = false; } else { inCode = true; }
+      continue;
+    }
+    if (inCode) { codeBuf.push(raw); continue; }
+    if (!line.trim()) { closeList(); continue; }
+    let m;
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+      closeList();
+      const lv = Math.min(m[1].length, 4);
+      out.push('<h' + lv + '>' + inlineMd(m[2]) + '</h' + lv + '>');
+      continue;
+    }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { closeList(); out.push('<hr>'); continue; }
+    if ((m = line.match(/^\s*>\s?(.*)$/))) { closeList(); out.push('<blockquote>' + inlineMd(m[1]) + '</blockquote>'); continue; }
+    if ((m = line.match(/^\s*[-*+]\s+(.*)$/))) {
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push('<li>' + inlineMd(m[1]) + '</li>');
+      continue;
+    }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push('<li>' + inlineMd(m[1]) + '</li>');
+      continue;
+    }
+    closeList();
+    out.push('<p>' + inlineMd(line) + '</p>');
+  }
+  closeList();
+  if (inCode && codeBuf.length) flushCode();
+  return out.join('\n');
+}
+
+/** 流式输出时按 60ms 节流重绘，避免每个 delta 都全量渲染 */
+function makeMdPainter(el) {
+  let last = 0;
+  return function paint(text, force) {
+    const now = Date.now();
+    if (!force && now - last < 60) return;
+    last = now;
+    el.innerHTML = renderMarkdown(text);
+    el.scrollTop = el.scrollHeight;
+  };
 }
 
 /* ---------------- 热力图（按周列，仿 flomo：7 行 × N 周，底部月份） ---------------- */
@@ -1038,6 +1105,7 @@ let currentAi = { skill: null, text: '', payload: {} };
 async function runAi(skill, payload = {}) {
   if (!state.llm.hasKey) { toast('先到设置里填模型 API Key'); $('#btn-settings').click(); return; }
   const body = $('#rail-body');
+  const paint = makeMdPainter(body);
   body.classList.remove('streaming');
   body.innerHTML = '<p class="thinking muted small">思考中<i></i><i></i><i></i></p>';
   $('#btn-ai-save').hidden = true;
@@ -1070,11 +1138,11 @@ async function runAi(skill, payload = {}) {
         if (json.error) throw new Error(json.error);
         if (json.delta) {
           currentAi.text += json.delta;
-          body.textContent = currentAi.text;
-          body.scrollTop = body.scrollHeight;
+          paint(currentAi.text);
         }
       }
     }
+    paint(currentAi.text, true);
     body.classList.remove('streaming');
     $('#btn-ai-save').hidden = !currentAi.text;
   } catch (e) {
@@ -1339,6 +1407,7 @@ async function runInsight(p) {
   $('#insight-result-title').textContent = p.name;
   $('#insight-result-sub').textContent = p.single ? '这条笔记' : (!insightState.custom && p.days ? '建议范围：' + p.range : insightScopeText());
   const body = $('#insight-result-body');
+  const paint = makeMdPainter(body);
   body.textContent = '正在读你的笔记…';
   $('#btn-insight-save').hidden = true;
 
@@ -1370,11 +1439,11 @@ async function runInsight(p) {
         if (json.error) throw new Error(json.error);
         if (json.delta) {
           insightState.text += json.delta;
-          body.textContent = insightState.text;
-          body.scrollTop = body.scrollHeight;
+          paint(insightState.text);
         }
       }
     }
+    paint(insightState.text, true);
     $('#btn-insight-save').hidden = !insightState.text;
   } catch (e) {
     body.textContent = '生成失败：' + e.message;
@@ -1423,7 +1492,7 @@ $('#btn-insight-history').onclick = async () => {
         $('#insight-result').hidden = false;
         $('#insight-result-title').textContent = (p ? p.name : name) + ' · 历史';
         $('#insight-result-sub').textContent = '';
-        $('#insight-result-body').textContent = n.content;
+        $('#insight-result-body').innerHTML = renderMarkdown(n.content);
         $('#btn-insight-save').hidden = false;
       };
       box.appendChild(el);

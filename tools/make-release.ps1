@@ -49,12 +49,6 @@ Copy-Item (Join-Path $root '创建桌面快捷方式.cmd') $stage
 Copy-Item (Join-Path $root 'tools\release\start-desktop.cmd') $stage
 Copy-Item (Join-Path $root 'tools\release\使用说明.txt') $stage
 
-# 4b) macOS 启动脚本：app.zip 是两个平台共用的更新包，mac 也需要这几个文件
-foreach ($f in @('start.command', 'start-server.command', '使用说明-mac.txt')) {
-  $src = Join-Path $root $f
-  if (Test-Path $src) { Copy-Item $src $stage }
-}
-
 # 5) 版本清单（给「检查更新」用）
 $verJson = '{"name":"flomo local","version":"' + $Version + '","platform":"win-x64"}'
 Set-Content -Path (Join-Path $stage 'version.json') -Value $verJson -Encoding UTF8
