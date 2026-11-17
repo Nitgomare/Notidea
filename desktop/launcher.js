@@ -50,12 +50,42 @@ async function ensureServer() {
   throw new Error('服务没有起来，看看 data/server.log');
 }
 
+// 启动无边框外壳：5 秒内没退出就算成功（WebView2 初始化失败会立刻以 2 退出）
+function tryShell(exe) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let child;
+    try {
+      child = spawn(exe, [URL, ROOT], { detached: true, stdio: 'ignore' });
+    } catch (e) {
+      return resolve(false);
+    }
+    child.unref();
+    const timer = setTimeout(() => { if (!settled) { settled = true; resolve(true); } }, 5000);
+    child.on('error', () => { if (!settled) { settled = true; clearTimeout(timer); resolve(false); } });
+    child.on('exit', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) console.error('外壳启动失败（退出码 ' + code + '），回退到浏览器');
+      resolve(code === 0);
+    });
+  });
+}
+
 (async () => {
   try {
     await ensureServer();
   } catch (e) {
     console.error(e.message);
     process.exit(1);
+  }
+  // 首选：无边框 WebView2 外壳（Windows 专用，仓库里自带 exe 与依赖）
+  if (process.platform === 'win32') {
+    const shellExe = path.join(ROOT, 'desktop', 'shell', 'FlomoShell.exe');
+    if (fs.existsSync(shellExe) && (await tryShell(shellExe))) {
+      process.exit(0);
+    }
   }
   const browser = platform.findBrowser();
   if (!browser) {

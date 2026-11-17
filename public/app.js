@@ -1510,6 +1510,20 @@ $('#btn-insight-more').onclick = () => {
     '视角就是一个提示词文件，一个文件一张卡片：\n\n  prompts/insights/<id>.md\n\n文件头写 name / author / category / range / days / icon / description / system，正文里可以用：\n\n  {{memos}}   选中的笔记正文（带日期）\n  {{count}}   笔记条数\n  {{tags}}    涉及的标签数\n  {{range}}   范围描述\n\n存盘后重开这个窗口就能看到新卡片。';
 };
 
+/* ---------------- 无边框桌面外壳（WebView2）：窗口按钮由页面驱动 ---------------- */
+const shellHost = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
+if (shellHost) {
+  document.body.classList.add('shell');
+  const winSend = (action) => { try { shellHost.postMessage({ type: 'win', action }); } catch (e) { /* 忽略 */ } };
+  const box = $('#win-controls');
+  if (box) {
+    box.hidden = false;
+    box.querySelector('[data-win="min"]').onclick = () => winSend('minimize');
+    box.querySelector('[data-win="max"]').onclick = () => winSend('maximize');
+    box.querySelector('[data-win="close"]').onclick = () => winSend('close');
+  }
+}
+
 /* ---------------- 启动 ---------------- */
 (async function boot() {
   await refreshBootstrap();

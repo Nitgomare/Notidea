@@ -26,6 +26,7 @@ foreach ($d in @('lib', 'prompts', 'public', 'assets')) {
 }
 New-Item -ItemType Directory -Path (Join-Path $stage 'desktop') -Force | Out-Null
 Copy-Item (Join-Path $root 'desktop\launcher.js') (Join-Path $stage 'desktop')
+Copy-Item (Join-Path $root 'desktop\shell') (Join-Path $stage 'desktop\shell') -Recurse
 New-Item -ItemType Directory -Path (Join-Path $stage 'tools') -Force | Out-Null
 foreach ($t in @('import-flomo.js', 'make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
   $src = Join-Path $root ('tools\' + $t)
