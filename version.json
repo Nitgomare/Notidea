@@ -1,6 +1,6 @@
 {
-  "version": "1.4.3",
-  "notes": "窗口按钮换成 SVG 图标并加大；侧栏整体放大一档（292px、字号与间距上调）",
+  "version": "1.4.4",
+  "notes": "清理仓库死文件；快捷方式优先直达 Electron 壳（修复用脚本建快捷方式会开成 Edge 窗口）",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }
