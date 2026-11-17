@@ -39,12 +39,13 @@ const publicConfig = () => {
 function loadPrompt(kind) {
   const file = path.join(PROMPT_DIR, `${kind}.md`);
   if (!fs.existsSync(file)) throw new Error(`未找到提示词模板: prompts/${kind}.md`);
-  const raw = fs.readFileSync(file, 'utf8');
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const raw = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+  // CRLF / LF 都要认：Windows 上 git 的 autocrlf 会把 .md 转成 CRLF，只认 \n 会让 front-matter 解析失败
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?([\s\S]*)$/);
   const meta = {};
   let body = raw;
   if (m) {
-    for (const line of m[1].split('\n')) {
+    for (const line of m[1].split(/\r?\n/)) {
       const kv = line.match(/^([A-Za-z_]+):\s*(.*)$/);
       if (kv) meta[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, '');
     }

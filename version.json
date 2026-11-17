@@ -1,6 +1,6 @@
 {
-  "version": "1.4.4",
-  "notes": "清理仓库死文件；快捷方式优先直达 Electron 壳（修复用脚本建快捷方式会开成 Edge 窗口）",
+  "version": "1.4.5",
+  "notes": "修复 AI 洞察失配：提示词头部解析只认 LF，Windows 上 CRLF 的 .md 会让视角名称/分类/范围全部退化",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }
