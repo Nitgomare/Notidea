@@ -1,6 +1,6 @@
 {
-  "version": "3.2.0",
-  "notes": "3.2.0：修复更新期间设置无法重新打开；中文路径直接启动PowerShell更新器，增加超时、失败保护和恢复旧服务。",
+  "version": "3.2.1",
+  "notes": "3.2.1：与3.2.0功能一致，用于验证真实下载安装与重启升级链路。",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }
