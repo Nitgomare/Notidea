@@ -1275,9 +1275,8 @@ $('#btn-check-update').onclick = async () => {
   }
 };
 
-$('#btn-do-update').onclick = async () => {
-  const note = $('#update-note');
-  const btn = $('#btn-do-update');
+/** 下载并安装更新；note 显示进度，btn 在更新期间禁用 */
+async function installUpdate(note, btn) {
   btn.disabled = true;
   note.textContent = '正在下载并安装…装好后窗口会自动刷新，请不要关掉它';
   try {
@@ -1289,7 +1288,6 @@ $('#btn-do-update').onclick = async () => {
       return;
     }
     note.textContent = '已下载 v' + r.latest + '（' + Math.round((r.size || 0) / 1024) + ' KB），正在重启服务…';
-    // 等服务重启后自己刷新
     const want = r.latest;
     let tries = 0;
     const timer = setInterval(async () => {
@@ -1302,10 +1300,10 @@ $('#btn-do-update').onclick = async () => {
           setTimeout(() => location.reload(), 600);
           return;
         }
-      } catch (e) { /* 服务正在重启 */ }
+      } catch (err) { /* 服务正在重启 */ }
       if (tries > 90) {
         clearInterval(timer);
-        note.textContent = '服务没有自己起来，请手动关掉窗口后重新双击 start-desktop.cmd（数据没动）';
+        note.textContent = '服务没有自己起来，请手动关掉窗口再重新打开应用（数据没动）';
         btn.disabled = false;
       }
     }, 1000);
@@ -1313,7 +1311,9 @@ $('#btn-do-update').onclick = async () => {
     note.textContent = '更新失败：' + e.message;
     btn.disabled = false;
   }
-};
+}
+
+$('#btn-do-update').onclick = () => installUpdate($('#update-note'), $('#btn-do-update'));
 
 $('#btn-shortcut').onclick = async () => {
   const note = $('#shortcut-note');
@@ -1628,6 +1628,42 @@ if (shellBridge) {
   // 拖动 / 双击最大化 / 缩放 / 光标全部由壳（-webkit-app-region + 系统窗口）处理
   shellBridge.onState(applyMaxGlyph);
 }
+/* ---------------- 启动时自动检查更新 ---------------- */
+const UPDATE_SKIP_KEY = 'notidea.skipVer';
+
+async function promptUpdate(r) {
+  const dlg = $('#update-prompt');
+  if (!dlg) return;
+  $('#up-ver').textContent = 'v' + r.latest;
+  const notes = $('#up-notes');
+  notes.innerHTML = r.notes ? renderMarkdown(r.notes) : '<p class="muted small">（这个版本没有写更新说明）</p>';
+  $('#up-status').textContent = '当前版本 v' + r.current;
+  const skip = $('#up-skip');
+  const later = $('#up-later');
+  const now = $('#up-now');
+  skip.onclick = () => {
+    try { localStorage.setItem(UPDATE_SKIP_KEY, r.latest); } catch (e) { /* 忽略 */ }
+    dlg.close();
+  };
+  later.onclick = () => dlg.close();
+  now.onclick = async () => {
+    dlg.close();
+    try { $('#settings').showModal(); } catch (e) { /* 忽略 */ }
+    await installUpdate($('#up-status'), now);
+  };
+  dlg.addEventListener('close', () => { now.disabled = false; }, { once: true });
+  dlg.showModal();
+}
+
+async function autoCheckUpdate() {
+  try {
+    const skipped = localStorage.getItem(UPDATE_SKIP_KEY) || '';
+    const r = await api('/api/update/check');
+    if (!r || r.error || !r.hasUpdate) return;
+    if (skipped && skipped === r.latest) return;   // 用户选了「跳过此版本」
+    await promptUpdate(r);
+  } catch (e) { /* 离线/接口异常都不打扰用户 */ }
+}
 /* ---------------- 启动 ---------------- */
 (async function boot() {
   await refreshBootstrap();
@@ -1636,6 +1672,7 @@ if (shellBridge) {
   updateHint();
   if (!state.stats.total) draft.focus();
   if (window.innerWidth < 1180) closeRail();
+  setTimeout(autoCheckUpdate, 1500);
 })();
 
 /* ---------------- 笔记菜单（⋯） ---------------- */

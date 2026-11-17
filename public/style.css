@@ -1520,3 +1520,9 @@ body.shell .day-sep button { -webkit-app-region: no-drag; }
 }
 .gh-icon svg { width: 17px; height: 17px; fill: currentColor; }
 .gh-icon:hover { color: var(--ink); background: rgba(31, 41, 51, .07); }
+
+/* 启动时的更新提示弹窗 */
+.update-dialog { width: min(460px, calc(100vw - 40px)); }
+.update-dialog .update-notes { max-height: 220px; margin: 4px 0 6px; }
+.update-dialog h3 b { font-family: inherit; color: var(--accent); }
+#up-status { min-height: 16px; margin: 2px 0 4px; }

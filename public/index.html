@@ -416,6 +416,19 @@
 
 <div class="scrim" id="scrim" hidden></div>
 <div class="toast" id="toast" hidden></div>
+<dialog id="update-prompt" class="dialog update-dialog">
+  <div class="dialog-body">
+    <h3>发现新版本 <b id="up-ver">—</b></h3>
+    <div class="md update-notes" id="up-notes"></div>
+    <p class="muted small" id="up-status"></p>
+    <div class="dialog-actions">
+      <button type="button" class="ghost-btn" id="up-skip" title="以后不再提示这个版本">跳过此版本</button>
+      <button type="button" class="ghost-btn" id="up-later">以后再说</button>
+      <button type="button" class="primary-btn" id="up-now">下载并安装</button>
+    </div>
+  </div>
+</dialog>
+
 <script src="/app.js"></script>
 </body>
 </html>
