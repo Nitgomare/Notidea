@@ -29,7 +29,7 @@ const state = {
   tagSearch: '',
   collapsed: {},
   pendingFiles: [],
-  aiSkill: 'daily-review',
+  aiSkill: 'ask',
   aiText: '',
   heatMonth: null,
   // 默认折叠；只有用户明确展开过（存了 '1'）才展开
@@ -1102,6 +1102,8 @@ function syncScrim() {
 }
 function openRail() {
   APP().classList.add('rail-open');
+  if (!$('#rail-tabs .chip.active')) activateRailTab('ask');
+  $('#rail-input').hidden = state.aiSkill !== 'ask';
   APP().classList.remove('side-open');
   syncScrim();
   setTimeout(() => { const ask = $('#ask-input'); (state.aiSkill === 'ask' && ask ? ask : $('#btn-ai-run')).focus(); }, 200);
@@ -1179,6 +1181,48 @@ async function runAi(skill, payload = {}) {
   }
 }
 
+/* 右侧面板默认是「跟 AI 对话」：打开时若没有激活的 chip，就选 ask */
+function activateRailTab(skill) {
+  state.aiSkill = skill;
+  const chips = $('#rail-tabs').querySelectorAll('.chip');
+  chips.forEach((c) => c.classList.toggle('active', c.dataset.ai === skill));
+  const ask = skill === 'ask';
+  $('#rail-input').hidden = !ask;
+  const run = $('#btn-ai-run');
+  if (run) run.textContent = ask ? '问一下' : '生成';
+  const body = $('#rail-body');
+  if (body && !body.classList.contains('streaming') && !(currentAi && currentAi.text)) {
+    body.innerHTML = '<p class="muted small">' + (ask
+      ? '输入问题，AI 会检索本地笔记作答；聊过的内容会记住上下文。'
+      : '选一个技能，AI 会读取本地笔记生成内容。结果只保存在本地。') + '</p>';
+  }
+}
+
+/* 追问上下文：从洞察带过来的正文 + 最近几轮对话 */
+let railSeed = '';
+let railHistory = [];
+
+function railReset(seed = '') {
+  railSeed = seed || '';
+  railHistory = [];
+}
+
+async function askAi(q) {
+  const question = q.trim();
+  if (!question) { toast('先输入问题'); return; }
+  let payload = question;
+  const parts = [];
+  if (railSeed) parts.push('【刚才的洞察】\n' + railSeed.slice(0, 6000));
+  if (railHistory.length) {
+    parts.push('【之前的对话】\n' + railHistory.slice(-6).map((m) => (m.role === 'user' ? '我：' : 'AI：') + m.text).join('\n'));
+  }
+  if (parts.length) payload = parts.join('\n\n') + '\n\n【新问题】' + question;
+  railHistory.push({ role: 'user', text: question });
+  $('#ask-input').value = '';
+  await runAi('ask', { question: payload });
+  if (currentAi.text) railHistory.push({ role: 'ai', text: currentAi.text.slice(0, 1500) });
+}
+
 $('#rail-tabs').addEventListener('click', (e) => {
   const chip = e.target.closest('.chip');
   if (!chip) return;
@@ -1193,12 +1237,21 @@ $('#rail-tabs').addEventListener('click', (e) => {
 
 $('#btn-ai-run').onclick = () => {
   const skill = state.aiSkill;
-  if (skill === 'ask') {
-    const q = $('#ask-input').value.trim();
-    if (!q) { toast('先输入问题'); return; }
-    return runAi('ask', { question: q });
-  }
+  if (skill === 'ask') return askAi($('#ask-input').value);
   return runAi(skill, {});
+};
+
+/* 洞察结果：带着这条洞察继续对话 */
+$('#btn-insight-chat').onclick = () => {
+  const text = (insightState && insightState.text) ? insightState.text : ($('#insight-result-body').textContent || '');
+  const title = ($('#insight-result-title').textContent || '').trim();
+  if (!text.trim()) { toast('先生成一条洞察'); return; }
+  railReset('视角：' + (title || '未命名') + '\n' + text.trim());
+  dlgInsight.close();
+  openRail();
+  activateRailTab('ask');
+  $('#rail-body').innerHTML = '<p class="muted small">已把这条洞察带进对话，接着问就行（比如“那我该怎么改？”）。</p>';
+  setTimeout(() => $('#ask-input').focus(), 120);
 };
 
 $('#btn-ai-save').onclick = async () => {
@@ -1673,6 +1726,7 @@ async function autoCheckUpdate() {
   if (!state.stats.total) draft.focus();
   if (window.innerWidth < 1180) closeRail();
   setTimeout(autoCheckUpdate, 1500);
+  activateRailTab(state.aiSkill);
 })();
 
 /* ---------------- 笔记菜单（⋯） ---------------- */

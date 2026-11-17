@@ -1,6 +1,6 @@
 {
-  "version": "2.1.0",
-  "notes": "启动时自动检查更新：发现新版本弹小窗，可选择下载安装 / 以后再说 / 跳过此版本",
+  "version": "2.2.0",
+  "notes": "新增：洞察完成后可继续追问 AI；右侧面板默认「对话」；换新图标（紫色底白色「拾」）",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }

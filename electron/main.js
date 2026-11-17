@@ -117,6 +117,7 @@ async function createWindow() {
     minHeight: 520,
     frame: false,
     show: false,
+    icon: path.join(APP_DIR, 'assets', 'icon.png'),
     backgroundColor: BG,
     title: '拾念',
     webPreferences: {
@@ -219,6 +220,8 @@ function createTray() {
   tray.on('click', showWindow);
   tray.on('double-click', showWindow);
 }
+
+app.setAppUserModelId('com.notidea.app');
 
 app.whenReady().then(() => {
   createTray();
