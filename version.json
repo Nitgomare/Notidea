@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1",
-  "notes": "数据目录可自定义（%APPDATA%\\flomo-local\\data-dir.txt 指针 + 设置里切换/复制迁移/重启）；修复侧栏收起后没有展开按钮、主区反而变窄",
+  "version": "1.4.2",
+  "notes": "后台常驻：关闭窗口缩到托盘，托盘图标可打开/退出",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }

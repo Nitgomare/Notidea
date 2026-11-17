@@ -4,7 +4,7 @@
  * - 无边框窗口（frame:false），页面自己画标题栏与窗口按钮
  * - 本地服务由 node.exe 子进程提供，壳只负责起服务、开窗、转发窗口按钮
  */
-const { app, BrowserWindow, ipcMain, shell, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, screen, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -18,6 +18,9 @@ const BG = '#f3f3f7';
 
 let win = null;
 let serverProc = null;
+let tray = null;
+let quitting = false;
+let trayHintShown = false;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -130,7 +133,17 @@ async function createWindow() {
   win.on('unmaximize', sendState);
   win.on('resize', saveBounds);
   win.on('move', saveBounds);
-  win.on('close', saveBounds);
+  win.on('close', (e) => {
+    saveBounds();
+    // 没有托盘就别藏窗口，否则用户再也找不回来
+    if (quitting || !tray) return;
+    e.preventDefault();
+    win.hide();
+    if (tray && !trayHintShown) {
+      trayHintShown = true;
+      try { tray.displayBalloon({ title: 'flomo local', content: '已缩到托盘，点托盘图标可以再打开；退出请用托盘菜单。' }); } catch (err) { }
+    }
+  });
   win.on('closed', () => { win = null; });
   win.webContents.on('did-finish-load', sendState);
 
@@ -169,13 +182,55 @@ ipcMain.on('shell', (_event, action) => {
   else if (action === 'relaunch') { app.relaunch(); app.exit(0); }
 });
 
-app.whenReady().then(createWindow);
+function logTray(line) {
+  try {
+    fs.mkdirSync(path.join(APP_DIR, 'data'), { recursive: true });
+    fs.appendFileSync(path.join(APP_DIR, 'data', 'tray.log'), new Date().toISOString() + ' ' + line + '\n');
+  } catch (e) { }
+}
+
+function showWindow() {
+  if (!win || win.isDestroyed()) { createWindow(); return; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+function createTray() {
+  if (tray) return;
+  const ico = path.join(APP_DIR, 'assets', 'flomo-local.ico');
+  const png = path.join(APP_DIR, 'assets', 'icon-32.png');
+  let img = nativeImage.createFromPath(ico);
+  if (img.isEmpty()) img = nativeImage.createFromPath(png);
+  try {
+    tray = new Tray(img);
+    logTray('tray created, empty=' + img.isEmpty());
+  } catch (e) {
+    tray = null;
+    logTray('tray FAILED: ' + (e && e.message));
+    return;
+  }
+  tray.setToolTip('flomo local');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 flomo local', click: showWindow },
+    { type: 'separator' },
+    { label: '退出', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWindow);
+  tray.on('double-click', showWindow);
+}
+
+app.whenReady().then(() => {
+  createTray();
+  return createWindow();
+});
 
 app.on('window-all-closed', () => {
-  // 关窗口就退出（和原来的桌面壳一致）
-  app.quit();
+  // 缩到托盘后窗口只是隐藏，这里兜底：真关了窗口也不退出
+  if (quitting) app.quit();
 });
 
 app.on('before-quit', () => {
+  quitting = true;
   saveBounds();
 });
