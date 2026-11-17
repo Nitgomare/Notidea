@@ -1,15 +1,15 @@
-# flomo Local
+# 拾念 · Notidea
 
-> 本地优先的卡片笔记桌面应用。笔记、附件、AI 结果全部存在本机 SQLite，唯一联网的地方是你自己填的大模型 API。
+> 拾念（Notidea）· 本地优先的卡片笔记桌面应用。笔记、附件、AI 结果全部存在本机 SQLite，唯一联网的地方是你自己填的大模型 API。
 >
-> 下载：[Releases](https://github.com/Nitgomare/flomo-local/releases/latest) · 源码：MIT
+> 下载：[Releases](https://github.com/Nitgomare/拾念Notidea/releases/latest) · 源码：MIT
 
-一个**数据完全在本地**的卡片笔记应用：界面和交互照着 flomo 桌面端做，笔记、图片、标签、AI 结果全部存进本机；唯一需要联网的地方是你自己填的大模型 API。
+**拾念 / Notidea** 是一个**数据完全在本地**的卡片笔记应用：界面和交互照着 flomo 桌面端做，笔记、图片、标签、AI 结果全部存进本机；唯一需要联网的地方是你自己填的大模型 API。
 
 - 零第三方依赖，只用 Node 内置模块（`node:sqlite` / `node:http` / `fetch`），Node 22+ 即可。
 - 服务只监听 `127.0.0.1`，局域网其它机器访问不到。
 - 所有 AI 功能都是 `prompts/*.md` 里的提示词模板，改文件就改行为，不需要动代码。
-- 项目位置：`E:\flomolocal`（数据在 `E:\flomolocal\data`）。
+- 开发仓库：`E:\拾念Notidea`；安装版：`E:\Apps\拾念Notidea`（数据在安装目录的 `data\` 下，可在设置里改）。
 
 ---
 
@@ -24,17 +24,17 @@ PORT=8080 node server.js
 
 **桌面版（独立窗口，像 flomo 那样）**
 
-- **一键安装（推荐）**：到 Releases 下载 `install-flomo-local.exe`，**双击**。第一步选安装位置（默认 `%LOCALAPPDATA%\flomo-local`，可改到 `D:\Apps\flomo-local` 这类非系统盘，会记住上次的选择），之后自动下载完整包、建桌面/开始菜单快捷方式并启动。
-- 也可以下完整包 `flomo-local-<版本>-win-x64.zip`，解压后双击 `flomo-local.exe`（或 `start-desktop.cmd`）。
+- **一键安装（推荐）**：到 Releases 下载 `install-notidea.exe`，**双击**。第一步选安装位置（默认 `%LOCALAPPDATA%\notidea`，可改到 `D:\Apps\notidea` 这类非系统盘，会记住上次的选择），之后自动下载完整包、建桌面/开始菜单快捷方式并启动。
+- 也可以下完整包 `notidea-<版本>-win-x64.zip`，解压后双击 `Notidea.exe`（或 `start-desktop.cmd`）。
 - 源码目录想跑桌面版：`npm install` 之后双击 `start-desktop.cmd`，或 `npm start`。
 
-Windows 上走 **Electron 壳**（`flomo-local.exe` + `electron/main.js`）：没有系统标题栏，页面直接铺满窗口；拖动、缩放、双击最大化、边缘光标全部由 Electron / 系统处理；窗口按钮（— □ ✕）画在页面顶栏右侧，最大化时形状会变。窗口大小/位置记在 `data/shell-window.json`。
+Windows 上走 **Electron 壳**（`Notidea.exe` + `electron/main.js`）：没有系统标题栏，页面直接铺满窗口；拖动、缩放、双击最大化、边缘光标全部由 Electron / 系统处理；窗口按钮（— □ ✕）画在页面顶栏右侧，最大化时形状会变。窗口大小/位置记在 `data/shell-window.json`。
 
 没有 Electron 运行时（比如从源码跑、没装依赖）时，`start-desktop.cmd` 会回退到 Edge 的应用窗口模式（`--app`）：没有地址栏、没有标签页，自己会拉起本地服务；连 Edge 都没有就退回默认浏览器。
 
 从源码跑桌面版需要先装依赖：`npm install`（会下载 Electron 运行时），然后 `npm start`。
 
-桌面快捷方式由 `tools/make-shortcut.ps1` 生成：它会去注册表读**真实的桌面路径**（有的机器把「桌面」重定向到 D 盘），再在那里建 `flomo local.lnk`，旧位置残留的会一并删掉。桌面被搬走后重跑一次即可。
+桌面快捷方式由 `tools/make-shortcut.ps1` 生成：它会去注册表读**真实的桌面路径**（有的机器把「桌面」重定向到 D 盘），再在那里建 `拾念.lnk`，旧位置残留的会一并删掉。桌面被搬走后重跑一次即可。
 
 ### macOS
 
@@ -66,7 +66,7 @@ flomolocal/
 │   ├─ tag-suggest.md     标签建议
 │   └─ ask.md             问笔记
 ├─ public/                index.html / style.css / app.js（无框架，原生 DOM）
-├─ assets/                图标（icon.png / flomo-local.ico，由 tools/make-icon.py 生成）
+├─ assets/                图标（icon.png / notidea.ico，由 tools/make-icon.py 生成）
 ├─ desktop/               兜底启动（Edge --app，没有 Electron 时用）
 │   ├─ launcher.js        检查/拉起服务，再用独立窗口打开
 │   └─ open.vbs           无黑框启动（桌面快捷方式指向它）
@@ -75,7 +75,7 @@ flomolocal/
 ├─ tools/make-icon.py     生成 assets/ 下的图标
 ├─ lib/flomo-api.js       可选：flomo 官方 API 客户端（仅导入用）
 ├─ data/                  ← 你的一切数据都在这里
-│   ├─ flomo.db           SQLite 主库
+│   ├─ notidea.db           SQLite 主库
 │   ├─ files/             附件（图片 / 视频 / 语音）
 │   └─ llm.json           模型配置（含 Key，勿外传）
 ├─ start.cmd
@@ -162,7 +162,7 @@ flomolocal/
 | `Ctrl + Enter` | 保存笔记 / 结束编辑 |
 | `Esc` | 先关弹窗，再清空搜索 / 取消编辑 |
 
-（和 flomo 桌面端一致；窗口图标来自 `assets/flomo-local.ico`，页面 favicon 是同一张。）
+（和 flomo 桌面端一致；窗口图标来自 `assets/notidea.ico`，页面 favicon 是同一张。）
 
 ## 窄窗口 / 小屏
 
@@ -224,7 +224,7 @@ flomolocal/
 
 设置 →「检查更新」→ 有新版时按钮变成「下载并安装 vX.Y.Z」：
 
-1. 客户端从 GitHub Releases 下载 `flomo-local-<ver>-app.zip`（只有程序文件，约 1MB，不含 Node 运行时）
+1. 客户端从 GitHub Releases 下载 `notidea-<ver>-app.zip`（只有程序文件，约 1MB，不含 Node 运行时）
 2. 落盘到 `data/update/`，生成 `apply.ps1`
 3. 服务自己退出，`apply.ps1` 等端口释放 → 解压 → `robocopy` 覆盖程序文件（**跳过 `data` 和 `runtime`**）→ 重新拉起服务
 4. 页面轮询到版本号变了就自动刷新
@@ -277,7 +277,7 @@ token 自动从 `%APPDATA%\flomo卡片笔记\config.json` 读（已登录的 flo
 
 ## 数据与隐私
 
-- 笔记在 `data/flomo.db`，附件在 `data/files/`；AI 只发送**你要分析的那些笔记正文**给你配置的端点，没有别的出站请求（无统计、无遥测、无 CDN）。
+- 笔记在 `data/notidea.db`，附件在 `data/files/`；AI 只发送**你要分析的那些笔记正文**给你配置的端点，没有别的出站请求（无统计、无遥测、无 CDN）。
 - 备份：复制 `data/` 目录即可；或页面点「导出」下载整库 JSON。
 - 想清空：删掉 `data/`，重启服务会重建空库。
 
@@ -302,3 +302,8 @@ node tools/selftest.js   # 附件上传/访问、筛选、双向链接、标签�
 | POST | `/api/ai/:skill` | SSE 流式生成（`daily-review` / `weekly-summary` / `random-walk` / `ask` / `tag-suggest` / `insight`） |
 | GET | `/api/insights` | 视角列表 + 当前范围统计 |
 | GET | `/api/insights/history` | 历史洞察 |
+
+## 贡献者
+
+- [AkaRhenium](https://github.com/AkaRhenium) — 界面与交互打磨、问题反馈
+- 以及所有提过 issue / 建议的人

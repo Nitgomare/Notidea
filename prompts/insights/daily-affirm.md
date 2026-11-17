@@ -1,6 +1,6 @@
 ---
 name: 每日肯定
-author: flomo
+author: 拾念
 category: 复盘整理
 range: 最近一天
 days: 1

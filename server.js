@@ -168,12 +168,12 @@ function foldIcsLine(line) {
   return out.join('\r\n ');
 }
 function buildIcs(items) {
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//flomo local//CN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//拾念//CN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   for (const it of items) {
     const title = String(it.content || '提醒').replace(/@\S+/g, '').trim() || '提醒';
     lines.push(
       'BEGIN:VEVENT',
-      'UID:flomo-local-remind-' + it.id + '@127.0.0.1',
+      'UID:notidea-remind-' + it.id + '@127.0.0.1',
       'DTSTAMP:' + icsTime(Date.now()),
       'DTSTART:' + icsTime(it.remind_at),
       'DTEND:' + icsTime(it.remind_at + 30 * 60000),
@@ -224,10 +224,10 @@ function makeShortcutPosix() {
     try {
       const dir = platform.desktopDir();
       fs.mkdirSync(dir, { recursive: true });
-      const file = path.join(dir, 'flomo local.command');
+      const file = path.join(dir, '拾念.command');
       const body = [
         '#!/bin/sh',
-        '# flomo local 启动器（双击运行）',
+        '# 拾念 启动器（双击运行）',
         'cd "' + __dirname + '" || exit 1',
         'if ! command -v node >/dev/null 2>&1; then',
         '  echo "需要 Node.js 22.5 或更高版本：brew install node"',
@@ -478,7 +478,7 @@ async function route(req, res) {
       return json(res, 200, await checkUpdate(force));
     }
     if (p === '/api/version' && req.method === 'GET') {
-      return json(res, 200, { name: 'flomo local', version: currentVersion() });
+      return json(res, 200, { name: '拾念', version: currentVersion() });
     }
     if (p === '/api/shortcut' && req.method === 'POST') {
       try {
@@ -552,7 +552,7 @@ async function route(req, res) {
       if (body.copy && resolved !== DATA_DIR) {
         try {
           fs.mkdirSync(resolved, { recursive: true });
-          for (const f of ['flomo.db', 'flomo.db-wal', 'flomo.db-shm']) {
+          for (const f of ['notidea.db', 'notidea.db-wal', 'notidea.db-shm']) {
             const src = path.join(DATA_DIR, f);
             if (fs.existsSync(src)) { fs.copyFileSync(src, path.join(resolved, f)); copied++; }
           }
@@ -742,7 +742,7 @@ async function route(req, res) {
       const list = dbm.reminders({ includeDone: false });
       res.writeHead(200, {
         'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="flomo-local-reminders.ics"',
+        'Content-Disposition': 'attachment; filename="notidea-reminders.ics"',
       });
       return res.end(buildIcs(list.map((r) => ({ id: r.id, remind_at: r.remind_at, content: r.content, excerpt: r.memo_excerpt }))));
     }
@@ -760,7 +760,7 @@ async function route(req, res) {
     if (p === '/api/export' && req.method === 'GET') {
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="flomo-local-${new Date().toISOString().slice(0, 10)}.json"`,
+        'Content-Disposition': `attachment; filename="notidea-${new Date().toISOString().slice(0, 10)}.json"`,
       });
       return res.end(JSON.stringify(dbm.exportAll(), null, 2));
     }
@@ -823,10 +823,12 @@ async function route(req, res) {
 }
 
 // ---- 检查更新（方法一：拉 GitHub 上的 version.json）----
-const UPDATE_REPO = 'Nitgomare/flomo-local';
-const UPDATE_REPO_URL = 'https://github.com/' + UPDATE_REPO;
-const UPDATE_VERSION_URL = 'https://raw.githubusercontent.com/' + UPDATE_REPO + '/main/version.json';
-const UPDATE_RELEASE_URL = 'https://github.com/' + UPDATE_REPO + '/releases/latest';
+const UPDATE_REPO = 'Nitgomare/拾念Notidea';
+// 仓库名带中文，拼 URL 必须按段编码（%E6%8B%BE…），否则 fetch 会 404
+const UPDATE_REPO_ENC = UPDATE_REPO.split('/').map(encodeURIComponent).join('/');
+const UPDATE_REPO_URL = 'https://github.com/' + UPDATE_REPO_ENC;
+const UPDATE_VERSION_URL = 'https://raw.githubusercontent.com/' + UPDATE_REPO_ENC + '/main/version.json';
+const UPDATE_RELEASE_URL = 'https://github.com/' + UPDATE_REPO_ENC + '/releases/latest';
 let updateCache = { at: 0, data: null };
 
 function versionParts(v) {
@@ -843,8 +845,8 @@ function compareVersion(a, b) {
 async function fetchLatestInfo() {
   // 1) GitHub API（不走 CDN，最可靠）
   try {
-    const r = await fetch('https://api.github.com/repos/' + UPDATE_REPO + '/releases/latest', {
-      headers: { 'user-agent': 'flomo-local', accept: 'application/vnd.github+json' },
+    const r = await fetch('https://api.github.com/repos/' + UPDATE_REPO_ENC + '/releases/latest', {
+      headers: { 'user-agent': 'notidea', accept: 'application/vnd.github+json' },
       signal: AbortSignal.timeout(7000),
     });
     if (r.ok) {
@@ -859,7 +861,7 @@ async function fetchLatestInfo() {
   // 2) 仓库根 version.json（raw；加时间戳绕缓存）
   try {
     const r = await fetch(UPDATE_VERSION_URL + '?t=' + Date.now(), {
-      headers: { 'user-agent': 'flomo-local', 'cache-control': 'no-cache', pragma: 'no-cache' },
+      headers: { 'user-agent': 'notidea', 'cache-control': 'no-cache', pragma: 'no-cache' },
       signal: AbortSignal.timeout(7000),
     });
     if (r.ok) {
@@ -870,8 +872,8 @@ async function fetchLatestInfo() {
   } catch (e) { /* 下一个 */ }
 
   // 3) jsDelivr 镜像（国内网络更通）
-  const r = await fetch('https://cdn.jsdelivr.net/gh/' + UPDATE_REPO + '@main/version.json?t=' + Date.now(), {
-    headers: { 'user-agent': 'flomo-local' },
+  const r = await fetch('https://cdn.jsdelivr.net/gh/' + UPDATE_REPO_ENC + '@main/version.json?t=' + Date.now(), {
+    headers: { 'user-agent': 'notidea' },
     signal: AbortSignal.timeout(7000),
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -903,13 +905,13 @@ async function checkUpdate(force) {
 }
 
 /* ---------------- 自动更新：下载 → 解压 → 覆盖 → 重启 ---------------- */
-const UPDATE_APP_ZIP = (v) => UPDATE_REPO_URL + '/releases/download/v' + v + '/flomo-local-' + v + '-app.zip';
+const UPDATE_APP_ZIP = (v) => UPDATE_REPO_URL + '/releases/download/v' + v + '/notidea-' + v + '-app.zip';
 // GitHub 的 release 资产会跳转到 release-assets.githubusercontent.com，国内部分网络把这个域名
 // 解析到 127.0.0.1（或直接屏蔽），下载就 ECONNREFUSED。仓库里同时放一份同样的包，走 jsDelivr / raw 兜底。
 const UPDATE_MIRROR_ZIPS = (v) => [
-  'https://cdn.jsdelivr.net/gh/' + UPDATE_REPO + '@v' + v + '/updates/flomo-local-' + v + '-app.zip',
-  'https://cdn.jsdelivr.net/gh/' + UPDATE_REPO + '@main/updates/flomo-local-' + v + '-app.zip',
-  'https://raw.githubusercontent.com/' + UPDATE_REPO + '/v' + v + '/updates/flomo-local-' + v + '-app.zip',
+  'https://cdn.jsdelivr.net/gh/' + UPDATE_REPO_ENC + '@v' + v + '/updates/notidea-' + v + '-app.zip',
+  'https://cdn.jsdelivr.net/gh/' + UPDATE_REPO_ENC + '@main/updates/notidea-' + v + '-app.zip',
+  'https://raw.githubusercontent.com/' + UPDATE_REPO_ENC + '/v' + v + '/updates/notidea-' + v + '-app.zip',
 ];
 
 function updateLog(line) {
@@ -927,7 +929,7 @@ async function fetchUpdateZip(url) {
     const r = await fetch(url, {
       signal: ctrl.signal,
       redirect: 'follow',
-      headers: { 'user-agent': 'flomo-local/' + APP_VERSION },
+      headers: { 'user-agent': 'notidea/' + APP_VERSION },
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const buf = Buffer.from(await r.arrayBuffer());
@@ -1019,7 +1021,7 @@ function writeApplyShell(zipPath) {
   const q = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
   const lines = [
     '#!/bin/sh',
-    '# flomo local 更新脚本（macOS / Linux）',
+    '# 拾念 更新脚本（macOS / Linux）',
     'ROOT=' + q(__dirname),
     'ZIP=' + q(zipPath),
     'SRC=' + q(src),
@@ -1061,7 +1063,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  flomo-local 已启动  →  http://${HOST}:${PORT}\n  数据目录: ${path.join(__dirname, 'data')}\n`);
+  console.log(`\n  notidea 已启动  →  http://${HOST}:${PORT}\n  数据目录: ${path.join(__dirname, 'data')}\n`);
 });
 
 // 自检：程序文件被删 / 被移走时主动退出，避免“页面能开、接口全挂”的僵尸服务占着端口
@@ -1069,7 +1071,7 @@ const SELF_FILES = [__filename, path.join(PUBLIC_DIR, 'index.html'), path.join(_
 setInterval(() => {
   const missing = SELF_FILES.filter((f) => !fs.existsSync(f));
   if (missing.length) {
-    console.error('[flomo-local] 程序文件缺失，服务退出：' + missing.join(', '));
+    console.error('[notidea] 程序文件缺失，服务退出：' + missing.join(', '));
     process.exit(3);
   }
 }, 10000).unref();

@@ -1,4 +1,4 @@
-# 编译一键安装器：install\Installer.cs -> dist\install-flomo-local.exe
+﻿# 编译一键安装器：install\Installer.cs -> dist\install-notidea.exe
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-installer.ps1
 param([string]$Out = '')
 
@@ -9,7 +9,7 @@ if (-not (Test-Path $csc)) { throw '找不到 csc.exe（.NET Framework 4.x）' }
 
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
-if (-not $Out) { $Out = Join-Path $dist 'install-flomo-local.exe' }
+if (-not $Out) { $Out = Join-Path $dist 'install-notidea.exe' }
 
 & $csc /nologo /target:winexe /platform:anycpu /out:$Out `
   /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `

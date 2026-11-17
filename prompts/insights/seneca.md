@@ -1,6 +1,6 @@
 ---
 name: 塞涅卡
-author: flomo
+author: 拾念
 category: 大师视角
 range: 最近一月 / 情绪日记
 days: 30

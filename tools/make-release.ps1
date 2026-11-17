@@ -1,9 +1,9 @@
-# 打包 flomo local（Windows）
+﻿# 打包 拾念（Windows）
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-release.ps1
 # 产出：
-#   dist\flomo-local-<版本>-win-x64.zip   完整包（Electron 壳 + Node 运行时）
-#   dist\flomo-local-<版本>-app.zip       仅程序文件（自动更新用）
-#   updates\flomo-local-<版本>-app.zip    镜像（jsDelivr / raw 兜底）
+#   dist\notidea-<版本>-win-x64.zip   完整包（Electron 壳 + Node 运行时）
+#   dist\notidea-<版本>-app.zip       仅程序文件（自动更新用）
+#   updates\notidea-<版本>-app.zip    镜像（jsDelivr / raw 兜底）
 param(
   [string]$Version = ''
 )
@@ -48,11 +48,11 @@ Copy-Item (Join-Path $root 'tools\release\start-desktop.cmd') $app
 Copy-Item (Join-Path $root 'tools\release\使用说明.txt') $app
 
 # 版本清单
-$verJson = '{"name":"flomo local","version":"' + $Version + '","platform":"win-x64"}'
+$verJson = '{"name":"拾念","version":"' + $Version + '","platform":"win-x64"}'
 Set-Content -Path (Join-Path $app 'version.json') -Value $verJson -Encoding UTF8
 
 # ---------- 2) 更新包（仅程序文件，不含 Electron 运行时与 node.exe） ----------
-$appZip = Join-Path $dist ('flomo-local-' + $Version + '-app.zip')
+$appZip = Join-Path $dist ('notidea-' + $Version + '-app.zip')
 if (Test-Path $appZip) { Remove-Item $appZip -Force }
 Compress-Archive -Path (Join-Path $app '*') -DestinationPath $appZip -CompressionLevel Optimal
 $appKb = [math]::Round((Get-Item $appZip).Length / 1KB, 0)
@@ -67,7 +67,7 @@ $eDist = Join-Path $root 'node_modules\electron\dist'
 if (Test-Path (Join-Path $eDist 'electron.exe')) {
   Copy-Item -Path (Join-Path $eDist '*') -Destination $full -Recurse -Force
   $exe = Join-Path $full 'electron.exe'
-  Move-Item $exe (Join-Path $full 'flomo-local.exe') -Force
+  Move-Item $exe (Join-Path $full 'Notidea.exe') -Force
   # Electron dist 自带一个无扩展名的 version 文件，会抢走 require('./version')，必须删掉
   Remove-Item (Join-Path $full 'version') -Force -ErrorAction SilentlyContinue
   Copy-Item (Join-Path $full 'LICENSE') (Join-Path $full 'LICENSE.electron') -ErrorAction SilentlyContinue
@@ -79,7 +79,7 @@ if (Test-Path (Join-Path $eDist 'electron.exe')) {
 New-Item -ItemType Directory -Path (Join-Path $full 'runtime') -Force | Out-Null
 Copy-Item (Get-Command node).Source (Join-Path $full 'runtime\node.exe')
 
-$zip = Join-Path $dist ('flomo-local-' + $Version + '-win-x64.zip')
+$zip = Join-Path $dist ('notidea-' + $Version + '-win-x64.zip')
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $full '*') -DestinationPath $zip -CompressionLevel Optimal
 $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
@@ -96,7 +96,7 @@ if (Test-Path $smoke) {
 # ---------- 4) 镜像（jsDelivr / raw 兜底） ----------
 $mirrorDir = Join-Path $root 'updates'
 New-Item -ItemType Directory -Path $mirrorDir -Force | Out-Null
-$mirrorZip = Join-Path $mirrorDir ('flomo-local-' + $Version + '-app.zip')
+$mirrorZip = Join-Path $mirrorDir ('notidea-' + $Version + '-app.zip')
 Copy-Item $appZip $mirrorZip -Force
 Write-Output ('mirror zip  : ' + $mirrorZip + '（记得 git add 并随版本一起推）')
 

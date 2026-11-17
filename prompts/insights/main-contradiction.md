@@ -1,6 +1,6 @@
 ---
 name: 主要矛盾
-author: flomo
+author: 拾念
 category: 思维决策
 range: 最近三月
 days: 90

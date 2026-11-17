@@ -1,10 +1,10 @@
-﻿flomo local — Windows x64
+拾念 — Windows x64
 =========================
 
 安装
 ----
-推荐：双击 install-flomo-local.exe（Releases 里的安装器）
-  1. 选安装位置（默认 %LOCALAPPDATA%\flomo-local，可以装到 D:\Apps\flomo-local）
+推荐：双击 install-notidea.exe（Releases 里的安装器）
+  1. 选安装位置（默认 %LOCALAPPDATA%\notidea，可以装到 D:\Apps\notidea）
   2. 自动下载完整包、建桌面和开始菜单快捷方式、直接启动
 
 不想用安装器：解压这份压缩包到任意可写目录，双击 start-desktop.cmd。
@@ -12,14 +12,14 @@
 数据
 ----
 默认在安装目录下的 data\：
-  data\flomo.db   SQLite 主库（笔记、标签、AI 结果）
+  data\notidea.db   SQLite 主库（笔记、标签、AI 结果）
   data\files\     图片 / 视频 / 语音附件
   data\llm.json   模型配置（含 API Key，别外传）
 
 想换位置：设置 → 数据目录 →「更改…」，可以把现有笔记一起复制过去。
-指针记在 %APPDATA%\flomo-local\data-dir.txt，重装程序不会动它。
+指针记在 %APPDATA%\notidea\data-dir.txt，重装程序不会动它。
 
 托盘
 ----
 点 ✕ 会缩到系统托盘（Windows 11 可能在「^ 隐藏的图标」里），
-托盘右键菜单有「打开 flomo local」和「退出」。
+托盘右键菜单有「打开 拾念」和「退出」。

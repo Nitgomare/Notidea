@@ -1,4 +1,4 @@
-// flomo local · 一键安装器（双击运行）
+// 拾念 · 一键安装器（双击运行）
 // 流程：选择安装位置 → 下载最新完整包 → 解压安装 → 建快捷方式 → 启动
 // 说明：不用 PowerShell（避免被杀软当成可疑脚本），全部走 .NET Framework 自带 API。
 using System;
@@ -15,9 +15,11 @@ using Microsoft.CSharp;
 
 internal static class Installer
 {
-    private const string Repo = "Nitgomare/flomo-local";
-    private const string AppName = "flomo local";
-    private const string ExeName = "flomo-local.exe";
+    private const string Repo = "Nitgomare/拾念Notidea";
+    // 仓库名带中文：所有 URL 里要用编码后的形式
+    private static readonly string RepoEnc = "Nitgomare/" + Uri.EscapeDataString("拾念Notidea");
+    private const string AppName = "拾念";
+    private const string ExeName = "Notidea.exe";
 
     private static Form _form;
     private static Panel _choosePanel;
@@ -35,7 +37,7 @@ internal static class Installer
 
     private static string ConfigDir
     {
-        get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "flomo-local"); }
+        get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "notidea"); }
     }
 
     private static string RememberFile
@@ -56,7 +58,7 @@ internal static class Installer
                 }
             }
             catch { }
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "flomo-local");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "拾念Notidea");
         }
     }
 
@@ -139,7 +141,7 @@ internal static class Installer
         {
             using (var dlg = new FolderBrowserDialog())
             {
-                dlg.Description = "选择 flomo local 的安装目录";
+                dlg.Description = "选择 拾念 的安装目录";
                 dlg.ShowNewFolderButton = true;
                 try
                 {
@@ -148,15 +150,15 @@ internal static class Installer
                 catch { }
                 if (dlg.ShowDialog() == DialogResult.OK)
                 {
-                    // 选中的目录下再建一层 flomo-local，避免装到盘根或杂乱目录
+                    // 选中的目录下再建一层 notidea，避免装到盘根或杂乱目录
                     var picked = dlg.SelectedPath.TrimEnd('\\');
-                    _pathBox.Text = Path.Combine(picked, "flomo-local");
+                    _pathBox.Text = Path.Combine(picked, "拾念Notidea");
                 }
             }
         };
         var note = new Label
         {
-            Text = "会创建「flomo local」桌面快捷方式和开始菜单项；笔记数据不在这个目录里（设置里可改）。",
+            Text = "会创建「拾念」桌面快捷方式和开始菜单项；笔记数据不在这个目录里（设置里可改）。",
             AutoSize = false,
             Size = new Size(470, 40),
             Location = new Point(20, 112),
@@ -262,10 +264,10 @@ internal static class Installer
             using (var http = new HttpClient())
             {
                 http.Timeout = TimeSpan.FromMinutes(60);
-                http.DefaultRequestHeaders.Add("User-Agent", "flomo-local-installer");
+                http.DefaultRequestHeaders.Add("User-Agent", "notidea-installer");
 
                 var rel = await GetLatestAsync();
-                var zip = Path.Combine(Path.GetTempPath(), "flomo-local-" + rel.Version + ".zip");
+                var zip = Path.Combine(Path.GetTempPath(), "notidea-" + rel.Version + ".zip");
 
                 if (!string.IsNullOrEmpty(_localZip))
                 {
@@ -279,7 +281,7 @@ internal static class Installer
                 }
 
                 SetStep("正在解压…", 86);
-                var stage = Path.Combine(Path.GetTempPath(), "flomo-local-stage-" + Guid.NewGuid().ToString("N"));
+                var stage = Path.Combine(Path.GetTempPath(), "notidea-stage-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(stage);
                 try
                 {
@@ -304,7 +306,7 @@ internal static class Installer
                 if (!_noShortcut)
                 {
                     SetStep("正在创建快捷方式…", 97);
-                    var ico = Path.Combine(dir, "assets", "flomo-local.ico");
+                    var ico = Path.Combine(dir, "assets", "notidea.ico");
                     MakeShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), AppName + ".lnk"), exe, dir, ico);
                     var startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                         "Microsoft", "Windows", "Start Menu", "Programs");
@@ -346,7 +348,7 @@ internal static class Installer
     {
         try
         {
-            var json = await DownloadStringAsync("https://api.github.com/repos/" + Repo + "/releases/latest");
+            var json = await DownloadStringAsync("https://api.github.com/repos/" + RepoEnc + "/releases/latest");
             var tag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
             var url = Regex.Match(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]*win-x64\\.zip)\"");
             if (tag.Success && url.Success)
@@ -354,14 +356,14 @@ internal static class Installer
         }
         catch { }
 
-        var vj = await DownloadStringAsync("https://raw.githubusercontent.com/" + Repo + "/main/version.json?t=" + DateTime.Now.Ticks);
+        var vj = await DownloadStringAsync("https://raw.githubusercontent.com/" + RepoEnc + "/main/version.json?t=" + DateTime.Now.Ticks);
         var vm = Regex.Match(vj, "\"version\"\\s*:\\s*\"([^\"]+)\"");
         if (!vm.Success) throw new Exception("无法获取最新版本信息，请检查网络。");
         var ver = vm.Groups[1].Value;
         return new Release
         {
             Version = ver,
-            Url = "https://github.com/" + Repo + "/releases/download/v" + ver + "/flomo-local-" + ver + "-win-x64.zip",
+            Url = "https://github.com/" + RepoEnc + "/releases/download/v" + ver + "/notidea-" + ver + "-win-x64.zip",
         };
     }
 
@@ -369,7 +371,7 @@ internal static class Installer
     {
         using (var wc = new WebClient())
         {
-            wc.Headers.Add("User-Agent", "flomo-local-installer");
+            wc.Headers.Add("User-Agent", "notidea-installer");
             return await wc.DownloadStringTaskAsync(new Uri(url));
         }
     }
@@ -378,7 +380,7 @@ internal static class Installer
     {
         var req = (HttpWebRequest)WebRequest.Create(url);
         req.Method = "HEAD";
-        req.UserAgent = "flomo-local-installer";
+        req.UserAgent = "notidea-installer";
         req.Timeout = 30000;
         using (var resp = (HttpWebResponse)req.GetResponse())
         {
@@ -403,7 +405,7 @@ internal static class Installer
             {
                 long to = Math.Min(from + Chunk - 1, total - 1);
                 var req = (HttpWebRequest)WebRequest.Create(url);
-                req.UserAgent = "flomo-local-installer";
+                req.UserAgent = "notidea-installer";
                 req.AddRange(from, to);
                 req.Timeout = 120000;
                 req.ReadWriteTimeout = 120000;

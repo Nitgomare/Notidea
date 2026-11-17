@@ -10,7 +10,7 @@ const notes = process.argv.slice(2).join(' ') || '';
 const data = {
   version,
   notes,
-  url: 'https://github.com/Nitgomare/flomo-local/releases/latest',
+  url: 'https://github.com/Nitgomare/拾念Notidea/releases/latest',
   released_at: new Date().toISOString().slice(0, 10),
 };
 const file = path.join(root, 'version.json');

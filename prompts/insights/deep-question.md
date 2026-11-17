@@ -1,6 +1,6 @@
 ---
 name: 心底之问
-author: flomo
+author: 拾念
 category: 自我觉察
 range: 最近半年
 days: 180

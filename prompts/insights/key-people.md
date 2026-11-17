@@ -1,6 +1,6 @@
 ---
 name: 关键人物
-author: flomo
+author: 拾念
 category: 自我觉察
 range: 最近三月
 days: 90

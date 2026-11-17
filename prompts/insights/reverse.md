@@ -1,6 +1,6 @@
 ---
 name: 逆向思考
-author: flomo
+author: 拾念
 category: 思维决策
 range: 全部笔记
 days: 0

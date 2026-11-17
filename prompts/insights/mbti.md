@@ -1,6 +1,6 @@
 ---
 name: MBTI 分析
-author: flomo
+author: 拾念
 category: 自我觉察
 range: 一年以上 / 生活记录
 days: 365

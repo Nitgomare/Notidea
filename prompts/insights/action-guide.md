@@ -1,6 +1,6 @@
 ---
 name: 行动指南
-author: flomo
+author: 拾念
 category: 复盘整理
 range: 最近一年
 days: 365

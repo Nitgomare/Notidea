@@ -1,4 +1,4 @@
-# 打「增量更新包」：只含程序文件，不含 node.exe 和 data
+﻿# 打「增量更新包」：只含程序文件，不含 node.exe 和 data
 # 用法：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-patch.ps1
 #   powershell ... -From 1.0.0 -To 1.1.0
@@ -12,7 +12,7 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $To) {
   $To = (& node -p "require('$($root -replace '\\','/')/version.js').version").Trim()
 }
-$name = 'flomo-local-' + $From + '-to-' + $To + '-patch'
+$name = 'notidea-' + $From + '-to-' + $To + '-patch'
 $dist = Join-Path $root 'dist'
 $stage = Join-Path $dist ('.patch-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $stage -Force | Out-Null

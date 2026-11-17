@@ -1,6 +1,6 @@
 ---
 name: 亚里士多德
-author: flomo
+author: 拾念
 category: 大师视角
 range: 全部笔记
 days: 0

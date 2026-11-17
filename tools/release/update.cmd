@@ -2,10 +2,10 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo.
-echo  = flomo local updater =
+echo  = 拾念 updater =
 echo.
 if not exist "%~dp0..\server.js" (
-  echo  [!] Extract this patch INSIDE the flomo local folder
+  echo  [!] Extract this patch INSIDE the 拾念 folder
   echo      so that this patch folder sits next to server.js and data.
   echo.
   pause

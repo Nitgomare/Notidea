@@ -1,11 +1,11 @@
-# 创建 flomo local 快捷方式（默认：桌面 + 桌面版窗口）
+﻿# 创建 拾念 快捷方式（默认：桌面 + 桌面版窗口）
 # 直接运行会询问保存位置；也可以带参数：
 #   -Dest "D:\somewhere"        指定文件夹（或直接给 .lnk 完整路径）
-#   -Name "flomo local"         快捷方式名字
+#   -Name "拾念"         快捷方式名字
 #   -Reveal                     创建完在资源管理器里选中它
 param(
   [string]$Dest = '',
-  [string]$Name = 'flomo local',
+  [string]$Name = '拾念',
   [switch]$Reveal,
   [switch]$Quiet
 )
@@ -37,7 +37,7 @@ function Get-RealDesktop {
 function Resolve-Target {
   if (-not (Test-Path $root)) { throw ('找不到程序目录：' + $root) }
   # 优先：打包好的 Electron 壳（无边框窗口，和安装器建的一致）
-  $appExe = Join-Path $root 'flomo-local.exe'
+  $appExe = Join-Path $root 'Notidea.exe'
   if (Test-Path $appExe) { return @{ Exe = $appExe; Args = ('"' + $root + '"'); Dir = $root } }
 
 
@@ -45,7 +45,7 @@ function Resolve-Target {
   if (Test-Path $vbs) { return @{ Exe = (Join-Path $env:WINDIR 'System32\wscript.exe'); Args = ('"' + $vbs + '"'); Dir = $root } }
   $cmd = Join-Path $root 'start-desktop.cmd'
   if (Test-Path $cmd) { return @{ Exe = $cmd; Args = ''; Dir = $root } }
-  throw '看起来这不是 flomo local 的目录（缺 desktop\open.vbs）'
+  throw '看起来这不是 拾念 的目录（缺 desktop\open.vbs）'
 }
 
 $desktop = Get-RealDesktop
@@ -56,7 +56,7 @@ if (-not $Dest) {
     $Dest = $desktop
   } else {
   Write-Host ''
-  Write-Host '  flomo local · 创建快捷方式' -ForegroundColor Green
+  Write-Host '  拾念 · 创建快捷方式' -ForegroundColor Green
   Write-Host '  ------------------------------------------------------------'
   Write-Host ('  默认（直接回车）：' + $desktop)
   Write-Host '  想放别处就把文件夹粘进来，例如 C:\Users\me\Desktop 或开始菜单目录'
@@ -98,9 +98,9 @@ try {
   $lnk.TargetPath = $target.Exe
   $lnk.Arguments = $target.Args
   $lnk.WorkingDirectory = $target.Dir
-  $ico = Join-Path $root 'assets\flomo-local.ico'
+  $ico = Join-Path $root 'assets\notidea.ico'
   if (Test-Path $ico) { $lnk.IconLocation = $ico + ',0' }
-  $lnk.Description = 'flomo local - 本地卡片笔记（独立窗口）'
+  $lnk.Description = '拾念 - 本地卡片笔记（独立窗口）'
   $lnk.WindowStyle = 7
   $lnk.Save()
 } catch {

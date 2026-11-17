@@ -1,6 +1,6 @@
 ---
 name: 默认洞察
-author: flomo
+author: 拾念
 category: 复盘整理
 range: 全部笔记
 days: 0

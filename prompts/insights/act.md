@@ -1,6 +1,6 @@
 ---
 name: ACT 疗法
-author: flomo
+author: 拾念
 category: 自我觉察
 range: 最近一月 / 情绪日记
 days: 30

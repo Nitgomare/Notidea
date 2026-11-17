@@ -1,6 +1,6 @@
 'use strict';
 /**
- * flomo local · Electron 桌面壳
+ * 拾念 · Electron 桌面壳
  * - 无边框窗口（frame:false），页面自己画标题栏与窗口按钮
  * - 本地服务由 node.exe 子进程提供，壳只负责起服务、开窗、转发窗口按钮
  */
@@ -118,7 +118,7 @@ async function createWindow() {
     frame: false,
     show: false,
     backgroundColor: BG,
-    title: 'flomo local',
+    title: '拾念',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -141,7 +141,7 @@ async function createWindow() {
     win.hide();
     if (tray && !trayHintShown) {
       trayHintShown = true;
-      try { tray.displayBalloon({ title: 'flomo local', content: '已缩到托盘，点托盘图标可以再打开；退出请用托盘菜单。' }); } catch (err) { }
+      try { tray.displayBalloon({ title: '拾念', content: '已缩到托盘，点托盘图标可以再打开；退出请用托盘菜单。' }); } catch (err) { }
     }
   });
   win.on('closed', () => { win = null; });
@@ -158,7 +158,7 @@ async function createWindow() {
   try {
     await ensureServer();
   } catch (e) {
-    dialog.showErrorBox('flomo local', String(e.message || e));
+    dialog.showErrorBox('拾念', String(e.message || e));
   }
   win.loadURL(APP_URL);
 }
@@ -198,7 +198,7 @@ function showWindow() {
 
 function createTray() {
   if (tray) return;
-  const ico = path.join(APP_DIR, 'assets', 'flomo-local.ico');
+  const ico = path.join(APP_DIR, 'assets', 'notidea.ico');
   const png = path.join(APP_DIR, 'assets', 'icon-32.png');
   let img = nativeImage.createFromPath(ico);
   if (img.isEmpty()) img = nativeImage.createFromPath(png);
@@ -210,9 +210,9 @@ function createTray() {
     logTray('tray FAILED: ' + (e && e.message));
     return;
   }
-  tray.setToolTip('flomo local');
+  tray.setToolTip('拾念');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开 flomo local', click: showWindow },
+    { label: '打开 拾念', click: showWindow },
     { type: 'separator' },
     { label: '退出', click: () => { quitting = true; app.quit(); } },
   ]));

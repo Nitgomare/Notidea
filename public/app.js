@@ -1333,7 +1333,7 @@ async function refreshDataDir() {
     const d = await api('/api/data-dir');
     dataDirState.dir = d.dir;
     if (note) {
-      const extra = d.env ? '（由环境变量 FLOMO_DATA_DIR 指定）' : '';
+      const extra = d.env ? '（由环境变量 NOTIDEA_DATA_DIR 指定）' : '';
       note.textContent = d.dir + extra;
       note.title = '指针文件：' + d.config;
     }
@@ -1835,7 +1835,7 @@ async function openFromQuery() {
     back.className = 'single-back';
     back.textContent = '← 回到全部笔记';
     document.querySelector('.topbar').prepend(back);
-    document.title = '一条笔记 · flomo local';
+    document.title = '一条笔记 · 拾念';
   } catch (e) {
     toast('打开失败：' + e.message);
   }
@@ -1926,7 +1926,7 @@ async function openShare(memo) {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#23201c';
   ctx.font = '600 30px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
-  ctx.fillText('flomo local', 134, 118);
+  ctx.fillText('拾念', 134, 118);
 
   ctx.fillStyle = '#8b8580';
   ctx.font = '26px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
@@ -1979,7 +1979,7 @@ async function openShare(memo) {
 
   ctx.fillStyle = '#8b8580';
   ctx.font = '24px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
-  ctx.fillText('写于 flomo local · 数据都在自己电脑里', 96, height - 84);
+  ctx.fillText('写于 拾念 · 数据都在自己电脑里', 96, height - 84);
 
   $('#share-hint').textContent = '长图适合发朋友圈；图片只在本机生成，不会上传。';
   dlg.showModal();
@@ -2009,7 +2009,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'flomo-local-' + Date.now() + '.png';
+    a.download = 'notidea-' + Date.now() + '.png';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
     toast('已保存');
@@ -2385,7 +2385,7 @@ $('#sel-export').onclick = () => {
     const d = new Date(m.created_at);
     return '## ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + fmtTime(m.created_at) + '\n\n' + m.content + '\n';
   }).join('\n---\n\n');
-  downloadFile('flomo-local-' + state.selected.size + '-notes.md', md, 'text/markdown;charset=utf-8');
+  downloadFile('notidea-' + state.selected.size + '-notes.md', md, 'text/markdown;charset=utf-8');
 };
 $('#sel-del').onclick = async () => {
   if (!state.selected.size) return toast('先选几条笔记');

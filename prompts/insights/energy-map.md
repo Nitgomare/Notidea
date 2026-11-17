@@ -1,6 +1,6 @@
 ---
 name: 能量地图
-author: flomo
+author: 拾念
 category: 自我觉察
 range: 最近一月
 days: 30
