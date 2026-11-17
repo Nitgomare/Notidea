@@ -1,4 +1,4 @@
-# flomo local · 打包冒烟检查
+﻿# flomo local · 打包冒烟检查
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\smoke-test.ps1 -AppDir <程序目录> [-Port 7781]
 # 用一个临时数据目录起服务，验证：版本一致、静态页可用、提示词 front-matter 解析正常（不是文件名）、数据目录可解析。
 param(

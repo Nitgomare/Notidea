@@ -126,7 +126,9 @@ function renderMarkdown(src) {
   let codeBuf = [];
   const closeList = () => { if (list) { out.push('</' + list + '>'); list = ''; } };
   const flushCode = () => { out.push('<pre><code>' + escapeHtml(codeBuf.join('\n')) + '</code></pre>'); codeBuf = []; };
-  for (const raw of lines) {
+  const cellsOf = (row) => row.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
     const line = raw.replace(/\s+$/, '');
     if (/^\s*```/.test(line)) {
       closeList();
@@ -144,6 +146,23 @@ function renderMarkdown(src) {
     }
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { closeList(); out.push('<hr>'); continue; }
     if ((m = line.match(/^\s*>\s?(.*)$/))) { closeList(); out.push('<blockquote>' + inlineMd(m[1]) + '</blockquote>'); continue; }
+    // 表格：| a | b |  紧跟一行 | --- | --- |
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      const sep = (lines[i + 1] || '').trim();
+      if (/^\|?[\s:|-]+\|?$/.test(sep) && sep.indexOf('-') >= 0) {
+        closeList();
+        const head = cellsOf(line);
+        let html = '<table><thead><tr>' + head.map((c) => '<th>' + inlineMd(c) + '</th>').join('') + '</tr></thead><tbody>';
+        i += 2;
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+          html += '<tr>' + cellsOf(lines[i]).map((c) => '<td>' + inlineMd(c) + '</td>').join('') + '</tr>';
+          i++;
+        }
+        i--;
+        out.push(html + '</tbody></table>');
+        continue;
+      }
+    }
     if ((m = line.match(/^\s*[-*+]\s+(.*)$/))) {
       if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
       out.push('<li>' + inlineMd(m[1]) + '</li>');
@@ -1243,7 +1262,9 @@ $('#btn-check-update').onclick = async () => {
     const r = await api('/api/update/check?force=1');
     if (r.error) { note.textContent = '检查失败：' + r.error + '（离线也能正常用）'; return; }
     if (r.hasUpdate) {
-      note.textContent = '发现新版本 v' + r.latest + (r.notes ? '：' + r.notes : '');
+      // 新版介绍是 Markdown（release notes），渲染出来，别直接塞纯文本
+      var notesHtml = r.notes ? '<div class="md update-notes">' + renderMarkdown(r.notes) + '</div>' : '';
+      note.innerHTML = '发现新版本 <b>v' + escapeHtml(r.latest) + '</b>' + notesHtml;
       $('#btn-do-update').hidden = false;
       $('#btn-do-update').textContent = '下载并安装 v' + r.latest;
     } else {

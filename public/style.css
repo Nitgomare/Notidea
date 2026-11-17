@@ -1480,3 +1480,19 @@ body.shell .day-sep button { -webkit-app-region: no-drag; }
 .heat-stats b { font-size: 20px; }
 .heat-stats span { font-size: 11px; }
 .side-title { font-size: 12px; }
+
+/* 更新说明（release notes 的 Markdown 渲染结果） */
+.update-notes {
+  max-height: 240px; overflow: auto; margin-top: 8px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fbfaf7; font-size: 12.5px; line-height: 1.6;
+}
+.update-notes h1, .update-notes h2, .update-notes h3, .update-notes h4 {
+  font-size: 13.5px; margin: 10px 0 4px; font-family: inherit;
+}
+.update-notes h1:first-child, .update-notes h2:first-child, .update-notes h3:first-child { margin-top: 0; }
+.update-notes p { margin: 4px 0; }
+.update-notes ul, .update-notes ol { margin: 4px 0; padding-left: 18px; }
+.update-notes table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.update-notes th, .update-notes td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; }
+.update-notes code { background: rgba(0,0,0,.05); padding: 0 3px; border-radius: 4px; }

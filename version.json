@@ -1,6 +1,6 @@
 {
-  "version": "1.4.5",
-  "notes": "修复 AI 洞察失配：提示词头部解析只认 LF，Windows 上 CRLF 的 .md 会让视角名称/分类/范围全部退化",
+  "version": "1.4.6",
+  "notes": "检查更新时把 release 说明按 Markdown 渲染（含表格），不再显示原始 markdown",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }
