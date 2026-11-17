@@ -498,17 +498,13 @@ async function route(req, res) {
         const latest = info.latest;
         setTimeout(() => {
           try {
-            if (IS_WIN) {
-              spawn('wscript.exe', [updater], {
+            const child = spawn(IS_WIN ? 'powershell.exe' : '/bin/sh',
+              IS_WIN ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updater] : [updater], {
                 detached: true, stdio: 'ignore', windowsHide: true, cwd: __dirname,
-              }).unref();
-            } else {
-              spawn('/bin/sh', [updater], {
-                detached: true, stdio: 'ignore', cwd: __dirname,
-              }).unref();
-            }
-          } catch (e) { /* 交给用户手动重启 */ }
-          setTimeout(() => process.exit(0), 300);
+              });
+            child.once('error', (e) => console.error('更新器启动失败，保留服务：', e.message));
+            child.once('spawn', () => { child.unref(); setTimeout(() => process.exit(0), 300); });
+          } catch (e) { console.error('更新器启动失败，保留服务：', e.message); }
         }, 500);
         return json(res, 200, { ok: true, latest, size: dl.size, from: dl.from, note: '正在替换文件并重启服务' });
       } catch (e) {
@@ -971,46 +967,73 @@ function writeApplyScript(zipPath) {
   const root = __dirname.replace(/\\/g, '\\');
   const nodeExe = process.execPath;
   const content = [
-    "$ErrorActionPreference = 'SilentlyContinue'",
+    "$ErrorActionPreference = 'Stop'",
     '$root = ' + q(root),
     '$zip = ' + q(zipPath),
     '$src = ' + q(src),
     '$node = ' + q(nodeExe),
     '$port = ' + PORT,
     'function Port-Free {',
-    '  try { $c = New-Object Net.Sockets.TcpClient; $c.Connect("127.0.0.1", $port); $c.Close(); return $false } catch { return $true }',
+    '  $c = New-Object Net.Sockets.TcpClient',
+    '  try { $c.Connect("127.0.0.1", $port); return $false } catch [Net.Sockets.SocketException] { return $true } finally { $c.Dispose() }',
     '}',
-    'for ($i = 0; $i -lt 120; $i++) { if (Port-Free) { break }; Start-Sleep -Milliseconds 250 }',
-    'Start-Sleep -Milliseconds 400',
     '$log = Join-Path $root "data\\update\\apply.log"',
     'function Say($m) { try { Add-Content -LiteralPath $log -Value (("[{0}] " -f (Get-Date -Format "HH:mm:ss")) + $m) -Encoding UTF8 } catch {} }',
+    'function Restart-ServiceProcess {',
+    '  if (-not (Port-Free)) { throw "restart refused: port occupied" }',
+    '  $p = Start-Process -FilePath $node -ArgumentList (\'"\' + (Join-Path $root "server.js") + \'"\') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $root "data\\server.log") -RedirectStandardError (Join-Path $root "data\\server.err.log") -PassThru',
+    '  for ($i = 0; $i -lt 120; $i++) {',
+    '    Start-Sleep -Milliseconds 250; $p.Refresh()',
+    '    if ($p.HasExited) { throw ("server exited: " + $p.ExitCode) }',
+    '    if (-not (Port-Free)) { Say ("server listening; pid=" + $p.Id); return }',
+    '  }',
+    '  Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue',
+    '  throw "server startup timeout"',
+    '}',
     'Say ("apply start: " + $zip)',
+    'for ($i = 0; $i -lt 120; $i++) { if (Port-Free) { break }; Start-Sleep -Milliseconds 250 }',
+    'if (-not (Port-Free)) { Say "port wait timeout: no files copied, running service untouched; zip kept"; exit 1 }',
+    'Start-Sleep -Milliseconds 400',
+    '$stage = "extract"',
+    '$copyStarted = $false',
+    'try {',
     'if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Recurse -Force }',
     // 不用 Expand-Archive：PowerShell 5.1 会从 PSModulePath 里加载到 PowerShell 7 的 Archive 模块，
     // 在 .NET Framework 下抛 "找不到 ExtractToDirectory 的重载"，解压会静默失败。
     'Add-Type -AssemblyName System.IO.Compression.FileSystem',
-    'try { [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $src); Say "extract ok" } catch { Say ("extract FAILED: " + $_.Exception.Message) }',
-    'robocopy $src $root /E /NFL /NDL /NJH /NJS /XD "$root\\data" "$root\\runtime" | Out-Null',
-    'Say ("robocopy exit=" + $LASTEXITCODE)',
-    'Start-Process -FilePath $node -ArgumentList (\'"\' + (Join-Path $root "server.js") + \'"\') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $root "data\\server.log") -RedirectStandardError (Join-Path $root "data\\server.err.log")',
-    'Start-Sleep -Seconds 1',
-    'Say ("done, version.json = " + ((Get-Content -LiteralPath (Join-Path $root "version.json") -Raw) -replace "`r?`n", " "))',
-    'if (Test-Path -LiteralPath (Join-Path $src "server.js")) { Remove-Item -LiteralPath $src -Recurse -Force; Remove-Item -LiteralPath $zip -Force } else { Say "zip kept: extract failed" }',
-    "$vbsSelf = Join-Path (Split-Path -Parent $PSCommandPath) 'apply.vbs'",
-    'Remove-Item -LiteralPath $vbsSelf -Force',
-    'Remove-Item -LiteralPath $PSCommandPath -Force',
+    '[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $src)',
+    'if (-not (Test-Path -LiteralPath (Join-Path $src "server.js") -PathType Leaf)) { throw "archive missing server.js" }',
+    'Say "extract ok"',
+    '$stage = "copy"',
+    'if (-not (Port-Free)) { throw "copy refused: port occupied" }',
+    '$copyStarted = $true',
+    'robocopy $src $root /E /R:2 /W:1 /XJ /NFL /NDL /NJH /NJS /XD "$src\\data" "$src\\runtime" "$root\\data" "$root\\runtime" | Out-Null',
+    '$copyCode = $LASTEXITCODE',
+    'Say ("robocopy exit=" + $copyCode)',
+    'if ($copyCode -ge 8) { throw ("robocopy failed: " + $copyCode) }',
+    '$stage = "restart"',
+    'Restart-ServiceProcess',
+    'Say "update SUCCESS: files copied and server listening"',
+    '} catch {',
+    '  Say ($stage + " FAILED: " + $_.Exception.Message + "; zip kept")',
+    '  if (-not $copyStarted) {',
+    '    try {',
+    '      if (Port-Free) { Restart-ServiceProcess; Say "old service restarted: program files unchanged" } else { Say "existing service left running: program files unchanged" }',
+    '    } catch { Say ("old service restart FAILED: " + $_.Exception.Message) }',
+    '  } else { Say "program files may have changed; no rollback claimed; manual recovery may be required" }',
+    '  exit 1',
+    '}',
+    'try {',
+    '  Remove-Item -LiteralPath $src -Recurse -Force',
+    '  Remove-Item -LiteralPath $zip -Force',
+    '  Remove-Item -LiteralPath $PSCommandPath -Force',
+    '} catch { Say ("cleanup warning: " + $_.Exception.Message) }',
+    'exit 0',
     '',
   ].join('\r\n');
   fs.writeFileSync(ps1, '\ufeff' + content, 'utf8');
 
-  const vbsPath = path.join(dir, 'apply.vbs');
-  const vbs = [
-    'Set sh = CreateObject("WScript.Shell")',
-    'sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""' + ps1 + '""", 0, False',
-    '',
-  ].join('\r\n');
-  fs.writeFileSync(vbsPath, vbs, 'utf8');
-  return vbsPath;
+  return ps1;
 }
 
 // macOS / Linux 的更新脚本：解压 → 覆盖程序文件（保留 data 与 runtime）→ 重启

@@ -8,7 +8,12 @@ const api = async (path, opts = {}) => {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+  if (!res.ok) {
+    const error = new Error(data.error || 'HTTP ' + res.status);
+    error.status = res.status;
+    error.data = data;
+    throw error;
+  }
   return data;
 };
 
@@ -1415,26 +1420,65 @@ $('#btn-tagsuggest').onclick = async () => {
 };
 
 /* ---------------- 设置 ---------------- */
-$('#btn-settings').onclick = async () => {
-  const b = await api('/api/bootstrap');
-  state.llm = b.llm;
-  $('#cfg-base').value = b.llm.baseUrl || '';
-  $('#cfg-model').value = b.llm.model || '';
-  $('#cfg-temp').value = b.llm.temperature ?? 0.7;
+let settingsSession = 0, settingsEdits = 0, settingsInitialEdits = 0, settingsRequest = 0;
+async function timedRequest(path, opts = {}, timeout = 10000) {
+  const controller = new AbortController();
+  let timer;
+  try {
+    return await Promise.race([
+      api(path, { ...opts, signal: controller.signal }),
+      new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('请求超时')); }, timeout); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+function fillSettings(llm) {
+  $('#cfg-base').value = llm.baseUrl || '';
+  $('#cfg-model').value = llm.model || '';
+  $('#cfg-temp').value = llm.temperature ?? 0.7;
   $('#cfg-key').value = '';
-  $('#cfg-note').textContent = b.llm.hasKey ? '已保存 Key：' + b.llm.keyHint + '（留空则不修改）' : 'Key 只写入本机 data/llm.json';
-  $('#app-version').textContent = 'v' + ((b.app && b.app.version) || '—');
-  $('#update-note').textContent = '';
+  $('#cfg-note').textContent = llm.hasKey ? '已保存 Key：' + llm.keyHint + '（留空则不修改）' : 'Key 只写入本机 data/llm.json';
+}
+$('#settings form').addEventListener('input', () => { settingsEdits++; });
+$('#settings form').addEventListener('submit', () => { settingsEdits++; });
+async function refreshSettings() {
+  const session = settingsSession, edits = settingsEdits, request = ++settingsRequest;
+  const current = () => $('#settings').open && session === settingsSession && request === settingsRequest;
+  $('#cfg-note').onclick = null;
+  try {
+    const b = await timedRequest('/api/bootstrap');
+    if (!current()) return;
+    if (edits === settingsEdits && edits === settingsInitialEdits) { state.llm = b.llm; fillSettings(b.llm); }
+    else $('#cfg-note').textContent = '配置已刷新，已保留你的编辑内容（Key 留空则不修改）。';
+    $('#app-version').textContent = 'v' + ((b.app && b.app.version) || '—');
+  } catch (e) {
+    if (!current()) return;
+    $('#cfg-note').textContent = '配置暂时无法刷新：' + e.message + '。已保留缓存和编辑内容，点击此处重试。';
+    $('#cfg-note').onclick = () => refreshSettings();
+  }
+}
+$('#btn-settings').onclick = () => {
+  if ($('#settings').open) return;
+  settingsSession++;
+  settingsInitialEdits = settingsEdits;
+  fillSettings(state.llm || {});
   $('#settings').showModal();
+  renderUpdateState();
   refreshDataDir();
+  return refreshSettings();
 };
 
+let updateCheck = 0;
 $('#btn-check-update').onclick = async () => {
+  if (updateState.locked) return;
+  const check = ++updateCheck, revision = updateState.revision;
+  const current = () => check === updateCheck && revision === updateState.revision && !updateState.locked;
   const note = $('#update-note');
   note.textContent = '正在检查…';
   $('#btn-do-update').hidden = true;
   try {
-    const r = await api('/api/update/check?force=1');
+    const r = await timedRequest('/api/update/check?force=1');
+    if (!current()) return;
+    updateState.message = '';
     if (r.error) { note.textContent = '检查失败：' + r.error + '（离线也能正常用）'; return; }
     if (r.hasUpdate) {
       // 新版介绍是 Markdown（release notes），渲染出来，别直接塞纯文本
@@ -1446,46 +1490,60 @@ $('#btn-check-update').onclick = async () => {
       note.textContent = '已是最新版本（v' + r.current + '）';
     }
   } catch (e) {
-    note.textContent = '检查失败：' + e.message;
+    if (current()) note.textContent = '检查失败：' + e.message;
   }
 };
 
-/** 下载并安装更新；note 显示进度，btn 在更新期间禁用 */
+const updateState = { locked: false, running: false, message: '', html: false, revision: 0 };
+function renderUpdateState() {
+  for (const id of ['#btn-do-update', '#up-now']) { const btn = $(id); if (btn) btn.disabled = updateState.locked; }
+  $('#btn-check-update').disabled = updateState.locked;
+  if (!updateState.message) return;
+  for (const id of ['#update-note', '#up-status']) {
+    const note = $(id);
+    if (note) note[updateState.html ? 'innerHTML' : 'textContent'] = updateState.message;
+  }
+}
+function setUpdateMessage(message, html = false) {
+  updateState.message = message; updateState.html = html; renderUpdateState();
+}
+/** 所有入口共用安装锁；请求结果不明确时不重新提交安装。 */
 async function installUpdate(note, btn) {
-  btn.disabled = true;
-  note.textContent = '正在下载并安装…装好后窗口会自动刷新，请不要关掉它';
+  if (updateState.locked) { renderUpdateState(); return; }
+  updateState.locked = true; updateState.running = true; updateState.revision++;
+  setUpdateMessage('正在下载并安装…装好后窗口会自动刷新，请不要关掉它');
   try {
-    const r = await api('/api/update/apply', { method: 'POST' });
+    const r = await timedRequest('/api/update/apply', { method: 'POST' }, 180000);
     if (r.error) {
-      note.innerHTML = '更新失败：' + escapeHtml(r.error) +
-        (r.url ? ' · <a href="' + escapeHtml(r.url) + '" target="_blank" rel="noreferrer">手动下载</a>' : '');
-      btn.disabled = false;
+      updateState.locked = false;
+      setUpdateMessage('更新失败：' + escapeHtml(r.error) +
+        (r.url ? ' · <a href="' + escapeHtml(r.url) + '" target="_blank" rel="noreferrer">手动下载</a>' : ''), true);
       return;
     }
-    note.textContent = '已下载 v' + r.latest + '（' + Math.round((r.size || 0) / 1024) + ' KB），正在重启服务…';
-    const want = r.latest;
-    let tries = 0;
-    const timer = setInterval(async () => {
-      tries += 1;
+    setUpdateMessage('已下载 v' + r.latest + '（' + Math.round((r.size || 0) / 1024) + ' KB），正在重启服务…');
+    const deadline = Date.now() + 90000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, deadline - Date.now())));
+      if (Date.now() >= deadline) break;
       try {
-        const v = await fetch('/api/version', { cache: 'no-store' }).then((x) => x.json());
-        if (v && v.version === want) {
-          clearInterval(timer);
-          note.textContent = '已更新到 v' + want + '，正在刷新…';
+        const v = await timedRequest('/api/version', { cache: 'no-store' }, Math.min(5000, deadline - Date.now()));
+        if (v && v.version === r.latest) {
+          setUpdateMessage('已更新到 v' + r.latest + '，正在刷新…');
           setTimeout(() => location.reload(), 600);
           return;
         }
-      } catch (err) { /* 服务正在重启 */ }
-      if (tries > 90) {
-        clearInterval(timer);
-        note.textContent = '服务没有自己起来，请手动关掉窗口再重新打开应用（数据没动）';
-        btn.disabled = false;
-      }
-    }, 1000);
+      } catch (err) { /* 服务正在重启，串行等待下一次探测 */ }
+    }
+    setUpdateMessage('等待服务重启超时，请手动关掉窗口再重新打开应用（数据没动）；为避免重复安装，本次不再提交更新。');
   } catch (e) {
-    note.textContent = '更新失败：' + e.message;
-    btn.disabled = false;
-  }
+    if (e.status && e.data && e.data.error) {
+      updateState.locked = false;
+      setUpdateMessage('更新失败：' + escapeHtml(e.message) +
+        (e.data.url ? ' · <a href="' + escapeHtml(e.data.url) + '" target="_blank" rel="noreferrer">手动下载</a>' : ''), true);
+    } else {
+      setUpdateMessage('暂时无法确认更新结果：' + e.message + '。服务可能仍在更新，请稍后重新打开应用；为避免重复安装，本次不再提交更新。');
+    }
+  } finally { updateState.running = false; renderUpdateState(); }
 }
 
 $('#btn-do-update').onclick = () => installUpdate($('#update-note'), $('#btn-do-update'));
@@ -1503,9 +1561,11 @@ $('#btn-shortcut').onclick = async () => {
 /* ---- 数据目录：可自定义，重装/升级不会动它 ---- */
 const dataDirState = { dir: '' };
 async function refreshDataDir() {
+  const session = settingsSession;
   const note = $('#data-dir-note');
   try {
-    const d = await api('/api/data-dir');
+    const d = await timedRequest('/api/data-dir');
+    if (session !== settingsSession || !$('#settings').open) return;
     dataDirState.dir = d.dir;
     if (note) {
       const extra = d.env ? '（由环境变量 NOTIDEA_DATA_DIR 指定）' : '';
@@ -1513,7 +1573,7 @@ async function refreshDataDir() {
       note.title = '指针文件：' + d.config;
     }
   } catch (e) {
-    if (note) note.textContent = '读取失败：' + e.message;
+    if (note && session === settingsSession && $('#settings').open) note.textContent = '读取失败：' + e.message;
   }
 }
 $('#btn-data-dir').onclick = async () => {
@@ -1552,6 +1612,7 @@ $('#settings form').onsubmit = async (e) => {
   e.preventDefault();
   if (configSaving) return;
   configSaving = true;
+  const session = settingsSession, edits = ++settingsEdits;
   $('#btn-cfg-save').disabled = true;
   try {
     await api('/api/config', {
@@ -1564,7 +1625,7 @@ $('#settings form').onsubmit = async (e) => {
       },
     });
     await refreshBootstrap();
-    $('#settings').close();
+    if (session === settingsSession && edits === settingsEdits) $('#settings').close();
     toast('已保存模型配置');
   } catch (err) { toast('配置保存失败：' + err.message); }
   finally { configSaving = false; $('#btn-cfg-save').disabled = false; }
@@ -1832,10 +1893,10 @@ async function promptUpdate(r) {
   later.onclick = () => dlg.close();
   now.onclick = async () => {
     dlg.close();
-    try { $('#settings').showModal(); } catch (e) { /* 忽略 */ }
+    $('#btn-settings').onclick();
     await installUpdate($('#up-status'), now);
   };
-  dlg.addEventListener('close', () => { now.disabled = false; }, { once: true });
+  renderUpdateState();
   dlg.showModal();
 }
 

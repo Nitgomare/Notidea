@@ -46,7 +46,7 @@ test('list ignores stale responses, serializes append, deduplicates IDs and adva
   assert.equal(h.run('state.memos.length'), 3); assert.equal(h.run('state.offset'), 4);
 });
 test('dialog submit prevents default synchronously and stays open on failure', async () => {
-  const request = deferred(); const h = harness(part('let configSaving = false;', 'const btnExport'), { api: () => request.promise, refreshBootstrap: async () => {} });
+  const request = deferred(); const h = harness(part('let configSaving = false;', 'const btnExport'), { settingsSession: 1, settingsEdits: 0, api: () => request.promise, refreshBootstrap: async () => {} });
   let prevented = false; const pending = h.$('#settings form').onsubmit({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true); assert.equal(h.$('#settings').closed, undefined);
   request.reject(new Error('offline')); await pending;
@@ -79,6 +79,107 @@ test('Escape consumes only the top dialog before rail or selection', () => {
   let prevented = false, stopped = false;
   callbacks[0]({ key: 'Escape', preventDefault() { prevented = true; }, stopImmediatePropagation() { stopped = true; } });
   assert.equal(dialog.closed, true); assert.equal(prevented, true); assert.equal(stopped, true);
+});
+function settingsHarness() {
+  let now = 0, seq = 0;
+  const timers = new Map(), elements = new Map(), requests = [];
+  const $ = (id) => {
+    if (!elements.has(id)) {
+      const listeners = new Map();
+      elements.set(id, { value: '', textContent: '', open: false, hidden: false, disabled: false,
+        showModal() { assert.equal(this.open, false); this.open = true; }, close() { this.open = false; },
+        addEventListener(type, fn) { listeners.set(type, fn); }, emit(type) { listeners.get(type)?.(); },
+      });
+    }
+    return elements.get(id);
+  };
+  let reloads = 0;
+  const h = harness(part('let settingsSession =', "$('#btn-shortcut').onclick"), {
+    $, Date: { now: () => now }, state: { llm: { model: 'cached', baseUrl: 'cached-url' } }, refreshDataDir() {}, escapeHtml: String, renderMarkdown: String,
+    api(path, opts) { const d = deferred(); requests.push({ ...d, path, opts }); return d.promise; },
+    setTimeout(fn, ms) { const id = ++seq; timers.set(id, { at: now + ms, fn }); return id; }, clearTimeout(id) { timers.delete(id); },
+    location: { reload() { reloads++; } },
+  });
+  const flush = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
+  return { ...h, $, requests, timers, flush, reloads: () => reloads,
+    async tick(ms) { const end = now + ms; while (true) { const next = [...timers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0]; if (!next) break; now = next[1].at; timers.delete(next[0]); next[1].fn(); await flush(); } now = end; await flush(); },
+  };
+}
+test('settings opens synchronously from cache, ignores repeated opens, and retries offline', async () => {
+  const h = settingsHarness(); const pending = h.$('#btn-settings').onclick();
+  assert.equal(h.$('#settings').open, true); assert.equal(h.$('#cfg-model').value, 'cached');
+  h.$('#btn-settings').onclick(); assert.equal(h.requests.length, 1);
+  h.requests[0].reject(Error('offline')); await pending;
+  assert.match(h.$('#cfg-note').textContent, /重试/);
+  const retry = h.$('#cfg-note').onclick(); h.requests[1].resolve({ llm: { model: 'fresh' }, app: { version: '2' } }); await retry;
+  assert.equal(h.$('#cfg-model').value, 'fresh'); assert.equal(h.$('#app-version').textContent, 'v2');
+});
+test('settings ignores old sessions and never overwrites user edits', async () => {
+  const h = settingsHarness(); const old = h.$('#btn-settings').onclick();
+  h.$('#settings').close(); const latest = h.$('#btn-settings').onclick();
+  h.requests[0].resolve({ llm: { model: 'stale' } }); await old;
+  assert.equal(h.$('#cfg-model').value, 'cached');
+  h.$('#cfg-model').value = 'typed'; h.$('#settings form').emit('input');
+  h.requests[1].resolve({ llm: { model: 'remote' } }); await latest;
+  assert.equal(h.$('#cfg-model').value, 'typed'); assert.equal(h.run('state.llm.model'), 'cached');
+});
+test('settings retry preserves edits made before the retry started', async () => {
+  const h = settingsHarness(); const pending = h.$('#btn-settings').onclick();
+  h.$('#cfg-model').value = 'typed'; h.$('#settings form').emit('input');
+  h.requests[0].reject(Error('offline')); await pending;
+  const retry = h.$('#cfg-note').onclick(); h.requests[1].resolve({ llm: { model: 'remote' } }); await retry;
+  assert.equal(h.$('#cfg-model').value, 'typed'); assert.match(h.$('#cfg-note').textContent, /保留/);
+});
+test('settings bootstrap timeout aborts and late response cannot overwrite retry', async () => {
+  const h = settingsHarness(); const pending = h.$('#btn-settings').onclick(); await h.tick(10000); await pending;
+  assert.equal(h.requests[0].opts.signal.aborted, true); assert.match(h.$('#cfg-note').textContent, /超时/);
+  const retry = h.$('#cfg-note').onclick(); h.requests[1].resolve({ llm: { model: 'retry' } }); await retry;
+  h.requests[0].resolve({ llm: { model: 'late' } }); await h.flush(); assert.equal(h.$('#cfg-model').value, 'retry');
+});
+test('installation is shared across entries and survives settings close/reopen', async () => {
+  const h = settingsHarness(); const install = h.run("installUpdate($('#up-status'), $('#up-now'))");
+  await h.run("installUpdate($('#update-note'), $('#btn-do-update'))"); assert.equal(h.requests.length, 1);
+  const open = h.$('#btn-settings').onclick(); h.$('#settings').close(); const reopen = h.$('#btn-settings').onclick();
+  assert.match(h.$('#update-note').textContent, /下载并安装/); assert.equal(h.$('#btn-do-update').disabled, true);
+  h.requests[1].reject(Error('offline')); h.requests[2].reject(Error('offline')); await Promise.all([open, reopen]);
+  h.requests[0].resolve({ latest: '2', size: 1024 }); await h.flush(); await h.tick(1000);
+  assert.equal(h.requests[3].path, '/api/version'); await h.tick(4000); assert.equal(h.requests.length, 4, 'no concurrent poll');
+  h.requests[3].resolve({ version: '2' }); await install; await h.tick(600);
+  assert.equal(h.reloads(), 1); assert.equal(h.$('#up-now').disabled, true); assert.equal(h.timers.size, 0);
+});
+test('hung apply is bounded and uncertain outcome keeps duplicate installation locked', async () => {
+  const h = settingsHarness(); const install = h.run("installUpdate($('#update-note'), $('#btn-do-update'))");
+  await h.tick(180000); await install;
+  assert.equal(h.requests[0].opts.signal.aborted, true); assert.equal(h.run('updateState.running'), false);
+  assert.match(h.$('#update-note').textContent, /无法确认/);
+  await h.run("installUpdate($('#up-status'), $('#up-now'))"); assert.equal(h.requests.length, 1); assert.equal(h.timers.size, 0);
+});
+test('HTTP apply rejection retains server error metadata and unlocks a safe retry', async () => {
+  const a = harness(part('const api =', 'const state ='), {
+    fetch: async () => ({ ok: false, status: 502, json: async () => ({ error: 'download failed', url: 'https://example.test' }) }),
+  });
+  let error;
+  try { await a.run("api('/api/update/apply', {method:'POST'})"); } catch (e) { error = e; }
+  assert.equal(error.status, 502); assert.equal(error.data.error, 'download failed');
+  const h = settingsHarness(); const install = h.run("installUpdate($('#update-note'), $('#btn-do-update'))");
+  h.requests[0].reject(error); await install;
+  assert.equal(h.run('updateState.locked'), false); assert.match(h.$('#update-note').innerHTML, /手动下载/);
+  const retry = h.run("installUpdate($('#update-note'), $('#btn-do-update'))"); assert.equal(h.requests.length, 2);
+  h.requests[1].resolve({ error: 'retry rejected' }); await retry;
+});
+test('hung version probes stop at overall deadline without parallel polling', async () => {
+  const h = settingsHarness(); const install = h.run("installUpdate($('#update-note'), $('#btn-do-update'))");
+  h.requests[0].resolve({ latest: '2' }); await h.flush(); await h.tick(90000); await install;
+  assert.equal(h.run('updateState.running'), false); assert.match(h.$('#update-note').textContent, /重启超时/);
+  assert.ok(h.requests.length <= 16); assert.ok(h.requests.slice(1).every((r) => r.opts.signal.aborted)); assert.equal(h.timers.size, 0);
+});
+test('stale update check cannot replace install progress; explicit rejection permits retry', async () => {
+  const h = settingsHarness(); const check = h.$('#btn-check-update').onclick();
+  const install = h.run("installUpdate($('#update-note'), $('#btn-do-update'))");
+  h.requests[0].resolve({ hasUpdate: true, latest: 'old' }); await check;
+  assert.match(h.$('#update-note').textContent, /下载并安装/);
+  h.requests[1].resolve({ error: 'not available', url: 'https://example.test' }); await install;
+  assert.equal(h.$('#btn-do-update').disabled, false); assert.match(h.$('#update-note').innerHTML, /手动下载/);
 });
 function searchHarness(reduced = false) {
   let now = 0, seq = 0;
