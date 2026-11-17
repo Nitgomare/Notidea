@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 // server.js — 本地笔记服务（零依赖）：静态页面 + 本地 REST API + 大模型流式代理
 const http = require('http');
 const { spawn } = require('child_process');
@@ -823,7 +823,7 @@ async function route(req, res) {
 }
 
 // ---- 检查更新（方法一：拉 GitHub 上的 version.json）----
-const UPDATE_REPO = 'Nitgomare/拾念Notidea';
+const UPDATE_REPO = 'Nitgomare/Notidea';
 // 仓库名带中文，拼 URL 必须按段编码（%E6%8B%BE…），否则 fetch 会 404
 const UPDATE_REPO_ENC = UPDATE_REPO.split('/').map(encodeURIComponent).join('/');
 const UPDATE_REPO_URL = 'https://github.com/' + UPDATE_REPO_ENC;

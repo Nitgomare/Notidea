@@ -15,9 +15,9 @@ using Microsoft.CSharp;
 
 internal static class Installer
 {
-    private const string Repo = "Nitgomare/拾念Notidea";
+    private const string Repo = "Nitgomare/Notidea";
     // 仓库名带中文：所有 URL 里要用编码后的形式
-    private static readonly string RepoEnc = "Nitgomare/" + Uri.EscapeDataString("拾念Notidea");
+    private static readonly string RepoEnc = Repo;   // 仓库名是 ASCII，不需要额外编码
     private const string AppName = "拾念";
     private const string ExeName = "Notidea.exe";
 

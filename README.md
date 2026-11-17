@@ -1,8 +1,8 @@
-# 拾念 · Notidea
+﻿# 拾念 · Notidea
 
 > 拾念（Notidea）· 本地优先的卡片笔记桌面应用。笔记、附件、AI 结果全部存在本机 SQLite，唯一联网的地方是你自己填的大模型 API。
 >
-> 下载：[Releases](https://github.com/Nitgomare/拾念Notidea/releases/latest) · 源码：MIT
+> 下载：[Releases](https://github.com/Nitgomare/Notidea/releases/latest) · 源码：MIT
 
 **拾念 / Notidea** 是一个**数据完全在本地**的卡片笔记应用：界面和交互照着 flomo 桌面端做，笔记、图片、标签、AI 结果全部存进本机；唯一需要联网的地方是你自己填的大模型 API。
 

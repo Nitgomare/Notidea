@@ -1,6 +1,6 @@
-{
+﻿{
   "version": "1.4.6",
   "notes": "检查更新时把 release 说明按 Markdown 渲染（含表格），不再显示原始 markdown",
-  "url": "https://github.com/Nitgomare/拾念Notidea/releases/latest",
+  "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }
