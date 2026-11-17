@@ -1,6 +1,6 @@
 {
-  "version": "3.2.1",
-  "notes": "3.2.1：与3.2.0功能一致，用于验证真实下载安装与重启升级链路。",
+  "version": "3.2.2",
+  "notes": "3.2.2：关闭窗口仍到托盘；托盘退出清理本应用后台服务，更新中保护退出，避免文件占用及误杀其他Node。",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }

@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { spawn } = require('child_process');
+const lifecycle = require('../lib/shell-lifecycle');
 
 const APP_DIR = path.join(__dirname, '..');
 const PORT = Number(process.env.PORT || 7777);
@@ -21,6 +22,35 @@ let serverProc = null;
 let tray = null;
 let quitting = false;
 let trayHintShown = false;
+let control = null;
+let exitPending = false;
+let serverStarting = false;
+
+async function requestQuit() {
+  if (quitting || exitPending) return;
+  exitPending = true;
+  try {
+    if (serverStarting) throw new Error('服务正在启动，请稍后退出');
+    if (control) {
+      const result = await lifecycle.request(PORT, control, 'shutdown');
+      if (result.code !== 200 || !result.ok) throw new Error(result.error === 'Forbidden'
+        ? '当前服务不是本桌面管理的服务，请手动结束旧实例后重新打开拾念'
+        : result.error || '无法确认服务已退出，请稍后重试');
+      let stopped = false;
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        try { await lifecycle.request(PORT, control); }
+        catch (e) { if (e.code === 'ECONNREFUSED') { stopped = true; break; } }
+      }
+      if (!stopped) throw new Error('尚未确认后台服务停止，请稍后退出');
+      control = null;
+    }
+    quitting = true;
+    app.quit();
+  } catch (e) {
+    dialog.showMessageBox({ type: 'info', title: '拾念', message: '暂时无法退出', detail: String(e.message || e) });
+  } finally { exitPending = false; }
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -54,18 +84,38 @@ function nodeExe() {
 }
 
 async function ensureServer() {
-  if (await ping()) return;
+  control = lifecycle.credentials(APP_DIR);
+  if (await ping()) {
+    let status;
+    try { status = await lifecycle.request(PORT, control); }
+    catch (e) { control = null; throw e; }
+    if (status.code !== 200 || !status.managed) {
+      control = null;
+      throw new Error('端口已有旧版或独立网页服务，不能安全接管。请手动结束旧实例后重新打开拾念。');
+    }
+    return;
+  }
   fs.mkdirSync(path.join(APP_DIR, 'data'), { recursive: true });
   const log = fs.openSync(path.join(APP_DIR, 'data', 'server.log'), 'a');
   serverProc = spawn(nodeExe(), [path.join(APP_DIR, 'server.js')], {
     cwd: APP_DIR,
     stdio: ['ignore', log, log],
     windowsHide: true,
+    env: { ...process.env, ...lifecycle.environment(control), NOTIDEA_UPDATE_HOST_PID: '' },
   });
+  fs.closeSync(log);
+  serverProc.on('error', (e) => logTray('server spawn failed: ' + e.message));
   serverProc.unref();
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 300));
-    if (await ping()) return;
+    if (await ping()) {
+      const status = await lifecycle.request(PORT, control);
+      if (status.code !== 200 || !status.managed) {
+        control = null;
+        throw new Error('端口被其他服务占用，不能安全接管');
+      }
+      return;
+    }
   }
   throw new Error('本地服务没有起来，看看 data/server.log');
 }
@@ -164,12 +214,13 @@ async function createWindow() {
     return { action: 'allow' };
   });
 
+  serverStarting = true;
   try {
     await ensureServer();
+    win.loadURL(APP_URL);
   } catch (e) {
     dialog.showErrorBox('拾念', String(e.message || e));
-  }
-  win.loadURL(APP_URL);
+  } finally { serverStarting = false; }
 }
 
 ipcMain.handle('pick-dir', async (_e, current) => {
@@ -223,7 +274,7 @@ function createTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 拾念', click: showWindow },
     { type: 'separator' },
-    { label: '退出', click: () => { quitting = true; app.quit(); } },
+    { label: '退出', click: requestQuit },
   ]));
   tray.on('click', showWindow);
   tray.on('double-click', showWindow);
@@ -241,7 +292,7 @@ app.on('window-all-closed', () => {
   if (quitting) app.quit();
 });
 
-app.on('before-quit', () => {
-  quitting = true;
+app.on('before-quit', (e) => {
+  if (!quitting) { e.preventDefault(); requestQuit(); return; }
   saveBounds();
 });

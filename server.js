@@ -10,6 +10,7 @@ const dbm = require('./db');
 const { version: APP_VERSION } = require('./version');
 const platform = require('./lib/platform');
 const IS_WIN = process.platform === 'win32';
+const shellLifecycle = require('./lib/shell-lifecycle').createService(__dirname);
 
 // 版本号以磁盘上的 version.js 为准（更新脚本替换文件后无需重启即可读到新值）
 function currentVersion() {
@@ -489,6 +490,8 @@ async function route(req, res) {
       }
     }
     if (p === '/api/update/apply' && req.method === 'POST') {
+      if (!shellLifecycle.beginUpdate()) return json(res, 409, { error: '正在更新或退出，请稍后重试' });
+      let handedOff = false;
       try {
         const info = await checkUpdate(true);
         if (info.error) return json(res, 502, { error: '检查更新失败：' + info.error });
@@ -496,16 +499,19 @@ async function route(req, res) {
         const dl = await downloadUpdate(info);
         const updater = IS_WIN ? writeApplyScript(dl.zip) : writeApplyShell(dl.zip);
         const latest = info.latest;
+        handedOff = true;
         setTimeout(() => {
           try {
             const child = require('./lib/updater-launcher').launchUpdater(updater, __dirname, IS_WIN);
-            child.once('error', (e) => console.error('更新器启动失败，保留服务：', e.message));
+            child.once('error', (e) => { shellLifecycle.endUpdate(); console.error('更新器启动失败，保留服务：', e.message); });
             child.once('spawn', () => { child.unref(); setTimeout(() => process.exit(0), 300); });
-          } catch (e) { console.error('更新器启动失败，保留服务：', e.message); }
+          } catch (e) { shellLifecycle.endUpdate(); console.error('更新器启动失败，保留服务：', e.message); }
         }, 500);
         return json(res, 200, { ok: true, latest, size: dl.size, from: dl.from, note: '正在替换文件并重启服务' });
       } catch (e) {
         return json(res, 500, { error: String(e.message || e), url: UPDATE_RELEASE_URL });
+      } finally {
+        if (!handedOff) shellLifecycle.endUpdate();
       }
     }
     if (p === '/api/config' && req.method === 'POST') {
@@ -1076,6 +1082,11 @@ function writeApplyShell(zipPath) {
 }
 
 const server = http.createServer((req, res) => {
+  if (shellLifecycle.handle(req, res, () => {
+    server.close(() => process.exit(0));
+    // Only this authenticated service exits; streams cannot keep it alive indefinitely.
+    setTimeout(() => process.exit(0), 1000);
+  })) return;
   route(req, res).catch((e) => {
     if (!res.headersSent) json(res, 500, { error: e.message });
     else res.end();
