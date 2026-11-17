@@ -1,6 +1,6 @@
 {
-  "version": "1.3.5",
-  "notes": "AI 输出按 Markdown 渲染（标题/列表/引用/代码/分隔线/粗体斜体/链接/标签）；1.3.5 起不再发布 mac 包（暂未跑通），Windows 不受影响",
+  "version": "1.3.6",
+  "notes": "重写 28 个洞察视角与单条洞察的提示词：改成对熟人说话的口吻、去掉编号分段与术语堆砌、负向禁词表换成正面要求、每张卡加字数上限、卡片描述同步",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }
