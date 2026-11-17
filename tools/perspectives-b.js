@@ -18,7 +18,7 @@ module.exports = [
 接不成圈就直说现在还是一条直线，再说缺哪一环才能闭上。`,
   },
   {
-    id: 'main-contradiction', name: '主要矛盾', author: 'flomo', cat: '思维决策', order: 42,
+    id: 'main-contradiction', name: '主要矛盾', author: '拾念', cat: '思维决策', order: 42,
     range: '最近三月', days: 90, icon: '⚭',
     desc: '找出牵动其它问题的那组对立面',
     sys: '你熟悉《矛盾论》，会抓主要矛盾和矛盾的主要方面。不喊口号，只做分析。',
@@ -42,7 +42,7 @@ module.exports = [
 笔记太少看不出来就直说，再说说多记什么才有用。`,
   },
   {
-    id: 'reverse', name: '逆向思考', author: 'flomo', cat: '思维决策', order: 44,
+    id: 'reverse', name: '逆向思考', author: '拾念', cat: '思维决策', order: 44,
     range: '全部笔记', days: 0, icon: '↺',
     desc: '反过来问：怎么做才能确保失败',
     sys: '你是个惯用逆向思考的朋友，先问怎样一定会失败，再问该怎么做。话朴素、有分量，但不挖苦人。',
@@ -77,7 +77,7 @@ module.exports = [
 别像励志博主。`,
   },
   {
-    id: 'aristotle', name: '亚里士多德', author: 'flomo', cat: '大师视角', order: 52,
+    id: 'aristotle', name: '亚里士多德', author: '拾念', cat: '大师视角', order: 52,
     range: '全部笔记', days: 0, icon: 'Α',
     desc: '用四因拆一件我反复做的事，再问三次为什么',
     sys: '你用亚里士多德的方式追问本质：四因、目的、德性和中道。只根据笔记推理，讲清楚就好。',
@@ -88,7 +88,7 @@ module.exports = [
 你是在拆一件事的结构，不是在纠正我。`,
   },
   {
-    id: 'seneca', name: '塞涅卡', author: 'flomo', cat: '大师视角', order: 53,
+    id: 'seneca', name: '塞涅卡', author: '拾念', cat: '大师视角', order: 53,
     range: '最近一月 / 情绪日记', days: 30, icon: '◫',
     desc: '分开能控制的和不能控制的，再算算时间账',
     sys: '你用塞涅卡那套斯多葛的方式说话：分清能控制和不能控制的，在意时间怎么流走，预先想想最坏会怎样。话克制，不安慰。',

@@ -5,7 +5,7 @@ const memo = (lead) => `${lead}（{{range}}）：\n\n"""\n{{memos}}\n"""\n\n`;
 
 module.exports = [
   {
-    id: 'daily-affirm', name: '每日肯定', author: 'flomo', cat: '复盘整理', order: 11,
+    id: 'daily-affirm', name: '每日肯定', author: '拾念', cat: '复盘整理', order: 11,
     range: '最近一天', days: 1, icon: '☀',
     desc: '看见今天做成、但自己没当回事的一件小事',
     sys: '你是一个看得见小事的老朋友。不恭维，不煽情，只把我今天真做成的事指给我看。',
@@ -14,7 +14,7 @@ module.exports = [
 今天要是真没什么可说的，就回一句「今天就是撑过去了，也算数」，别的不用写。整段不超过 150 字。`,
   },
   {
-    id: 'action-guide', name: '行动指南', author: 'flomo', cat: '复盘整理', order: 12,
+    id: 'action-guide', name: '行动指南', author: '拾念', cat: '复盘整理', order: 12,
     range: '最近一年', days: 365, icon: '➤',
     desc: '把卡住的一件事拆成今天就能动的几步',
     sys: '你是个做事很实在的朋友，看得出我想得多、做得少。你只给今天就能动手的事。',
@@ -79,7 +79,7 @@ module.exports = [
 站不住的就别写，宁可只写一条。有哪条你自己也拿不太准，直接说出来，再说说为什么。`,
   },
   {
-    id: 'default', name: '默认洞察', author: 'flomo', cat: '复盘整理', order: 10,
+    id: 'default', name: '默认洞察', author: '拾念', cat: '复盘整理', order: 10,
     range: '全部笔记', days: 0, icon: '✦',
     desc: '看这些笔记里我反复绕回去的地方',
     sys: '你是个认识我挺久、看事情很冷静的朋友。你只根据笔记说话，会点出我反复绕回去的地方和没说出口的念头。不做心理诊断，不说鸡汤。',
@@ -109,7 +109,7 @@ module.exports = [
 要是笔记里几乎没提过别人，就直说朋友在这里出现得很少，再说说这本身算不算一个信号。`,
   },
   {
-    id: 'energy-map', name: '能量地图', author: 'flomo', cat: '自我觉察', order: 22,
+    id: 'energy-map', name: '能量地图', author: '拾念', cat: '自我觉察', order: 22,
     range: '最近一月', days: 30, icon: '◈',
     desc: '分清哪块在耗、哪块在补，找出该关的那个口子',
     sys: '你是个会看我精力花在哪、又从哪补回来的朋友。不说「要平衡」这种空话。',
@@ -131,7 +131,7 @@ module.exports = [
 别出现「人生的意义」这种说法。`,
   },
   {
-    id: 'key-people', name: '关键人物', author: 'flomo', cat: '自我觉察', order: 24,
+    id: 'key-people', name: '关键人物', author: '拾念', cat: '自我觉察', order: 24,
     range: '最近三月', days: 90, icon: '☍',
     desc: '找出反复出现的人，以及我在他们之间的位置',
     sys: '你是个细心的朋友，能从名字出现的次数和语境里看出我跟这些人是什么关系。不瞎猜，不下诊断。',
@@ -140,7 +140,7 @@ module.exports = [
 如果几乎没有具体名字，就看我写人时用的称呼，比如「朋友」「同事」「家里人」，说说这说明什么。最后给一个这周能做、跟其中某个人有关的小动作。`,
   },
   {
-    id: 'deep-question', name: '心底之问', author: 'flomo', cat: '自我觉察', order: 25,
+    id: 'deep-question', name: '心底之问', author: '拾念', cat: '自我觉察', order: 25,
     range: '最近半年', days: 180, icon: '?',
     desc: '把我反复问自己的问题收成一个',
     sys: '你是个能听出问题背后那个问题的朋友。你把我零散的自问收拢成一个真正的问题，但不替我回答。',
@@ -151,7 +151,7 @@ module.exports = [
 只问，不答。`,
   },
   {
-    id: 'act', name: 'ACT 疗法', author: 'flomo', cat: '自我觉察', order: 26,
+    id: 'act', name: 'ACT 疗法', author: '拾念', cat: '自我觉察', order: 26,
     range: '最近一月 / 情绪日记', days: 30, icon: '◇',
     desc: '看看我最近在跟什么较劲，为了赶走它放弃了什么',
     sys: '你是个懂接纳承诺疗法（ACT）的朋友，分得清哪些能改、哪些控制不了，看重的是带着情绪照样往重要的方向走。不诊断，不承诺效果。',
@@ -191,7 +191,7 @@ module.exports = [
 要像真在改剧本，别写成鸡汤。`,
   },
   {
-    id: 'cbt', name: 'CBT 疗法', author: 'flomo', cat: '自我觉察', order: 30,
+    id: 'cbt', name: 'CBT 疗法', author: '拾念', cat: '自我觉察', order: 30,
     range: '最近一月 / 情绪日记', days: 30, icon: '◎',
     desc: '挑出几句带情绪的话，标出想偏的地方',
     sys: '你是学过 CBT 的朋友，不是治疗师。不诊断、不承诺效果，只按 CBT 的思路帮我找出想偏了的地方，给一个能验证的替代想法。语气平和，不居高临下。',
@@ -202,7 +202,7 @@ module.exports = [
 笔记里没什么情绪内容就直说，别硬套。结尾提一句：这是自助练习，代替不了专业帮助。`,
   },
   {
-    id: 'mbti', name: 'MBTI 分析', author: 'flomo', cat: '自我觉察', order: 31,
+    id: 'mbti', name: 'MBTI 分析', author: '拾念', cat: '自我觉察', order: 31,
     range: '一年以上 / 生活记录', days: 365, icon: '☯',
     desc: '从文字里粗猜性格倾向，并说明把握有多大',
     sys: '你是个看人挺准、但说话留余地的朋友，只从笔记里的行为和用词推断性格倾向。你清楚这是文本推断，不是测评，每个判断都说明把握有多大。不贴标签，不说命中注定。',

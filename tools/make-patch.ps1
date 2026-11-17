@@ -30,7 +30,7 @@ Copy-Item (Join-Path $root 'electron\preload.js') (Join-Path $stage 'electron')
 New-Item -ItemType Directory -Path (Join-Path $stage 'desktop') -Force | Out-Null
 Copy-Item (Join-Path $root 'desktop\launcher.js') (Join-Path $stage 'desktop')
 New-Item -ItemType Directory -Path (Join-Path $stage 'tools') -Force | Out-Null
-foreach ($t in @('import-flomo.js', 'make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
+foreach ($t in @('make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
   $src = Join-Path $root ('tools\' + $t)
   if (Test-Path $src) { Copy-Item $src (Join-Path $stage 'tools') }
 }

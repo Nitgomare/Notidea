@@ -193,7 +193,7 @@ function makeMdPainter(el) {
   };
 }
 
-/* ---------------- 热力图（按周列，仿 flomo：7 行 × N 周，底部月份） ---------------- */
+/* ---------------- 热力图（按周列，按周列：7 行 × N 周，底部月份） ---------------- */
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 const HEAT_WEEKS = 10;
 let heatLoadedDays = 154;
@@ -1014,7 +1014,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Ctrl+Shift+N 新建（和 flomo 一致）
+  // Ctrl+Shift+N 新建
   if (mod && e.shiftKey && key === 'n') {
     e.preventDefault();
     $('#btn-new').click();
@@ -1022,7 +1022,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Alt+Shift+A 唤起 AI 面板（和 flomo 一致）
+  // Alt+Shift+A 唤起 AI 面板
   if (e.altKey && e.shiftKey && key === 'a') {
     e.preventDefault();
     toggleRail();

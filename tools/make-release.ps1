@@ -36,7 +36,7 @@ Copy-Item (Join-Path $root 'desktop\launcher.js') (Join-Path $app 'desktop')
 Copy-Item (Join-Path $root 'tools\release\open.vbs') (Join-Path $app 'desktop')
 
 New-Item -ItemType Directory -Path (Join-Path $app 'tools') -Force | Out-Null
-foreach ($t in @('import-flomo.js', 'make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
+foreach ($t in @('make-shortcut.ps1', 'make-icon.py', 'selftest.js')) {
   $src = Join-Path $root ('tools\' + $t)
   if (Test-Path $src) { Copy-Item $src (Join-Path $app 'tools') }
 }

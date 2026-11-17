@@ -390,7 +390,7 @@ function listMemos({ tag = '', excludeTag = '', search = '', pin, since, until, 
   } else if (source === 'local') {
     where.push(`(source = 'local' AND content NOT LIKE '#AI/%')`);
   } else if (source === 'import') {
-    where.push(`source IN ('flomo', 'import')`);
+    where.push(`source = 'import'`);
   }
   if (onThisDay) {
     const now = new Date();
@@ -656,7 +656,7 @@ function stats() {
   return { total, today: todayCount, days, tags: tagCount };
 }
 
-function importMemo({ originSlug, content, createdAt, pinned = 0, source = 'flomo' }) {
+function importMemo({ originSlug, content, createdAt, pinned = 0, source = 'import' }) {
   const exists = db.prepare('SELECT id FROM memos WHERE origin_slug = ?').get(originSlug);
   if (exists) return { inserted: false, id: exists.id };
   const t = createdAt || now();

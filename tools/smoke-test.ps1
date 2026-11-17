@@ -27,7 +27,7 @@ if (-not (Test-Path (Join-Path $AppDir 'Notidea.exe'))) { Write-Host '  [warn] �
 # ---- 2) 起服务（临时数据目录，不碰用户数据）----
 $node = Join-Path $AppDir 'runtime\node.exe'
 if (-not (Test-Path $node)) { $node = 'node' }
-$tmpData = Join-Path $env:TEMP ('flomo-smoke-' + [Guid]::NewGuid().ToString('N'))
+$tmpData = Join-Path $env:TEMP ('notidea-smoke-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpData -Force | Out-Null
 $env:PORT = "$Port"
 $env:NOTIDEA_DATA_DIR = $tmpData

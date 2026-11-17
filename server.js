@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 // server.js — 本地笔记服务（零依赖）：静态页面 + 本地 REST API + 大模型流式代理
 const http = require('http');
 const { spawn } = require('child_process');
@@ -177,7 +177,7 @@ function buildIcs(items) {
       'DTSTAMP:' + icsTime(Date.now()),
       'DTSTART:' + icsTime(it.remind_at),
       'DTEND:' + icsTime(it.remind_at + 30 * 60000),
-      'SUMMARY:' + icsText('flomo · ' + title.slice(0, 60)),
+      'SUMMARY:' + icsText('拾念 · ' + title.slice(0, 60)),
       'DESCRIPTION:' + icsText(it.excerpt || ''),
       'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title.slice(0, 60)), 'TRIGGER:-PT0M', 'END:VALARM',
       'END:VEVENT',

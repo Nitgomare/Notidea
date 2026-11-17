@@ -1094,7 +1094,7 @@ body.float-mode { background: #eeeef6; }
 /* 小窗口：菜单不超出视口，超出部分内部滚动 */
 .tag-menu, .memo-menu { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 
-/* ---------------- AI 浮动按钮 + 浮动面板（仿 flomo 右下角 AI 入口） ---------------- */
+/* ---------------- AI 浮动按钮 + 浮动面板（右下角 AI 入口） ---------------- */
 .app, .app.rail-off { grid-template-columns: var(--side-w) minmax(0, 1fr); }
 .app.side-off { grid-template-columns: minmax(0, 1fr); }
 .app.side-off.rail-off { grid-template-columns: minmax(0, 1fr); }
@@ -1145,7 +1145,7 @@ body.single-mode .ai-fab { display: none; }
 }
 
 /* =====================================================================
-   v2 布局：仿 flomo 左右铺满；顶栏「标题▾ … 搜索」；卡片头部元信息
+   v2 布局：左右铺满；顶栏「标题▾ … 搜索」；卡片头部元信息
    ===================================================================== */
 .main { max-width: none; margin: 0; padding: 0 28px 40px; }
 /* 顶部常驻区：标题栏 + 输入框一起吸顶，滚动时都不消失 */

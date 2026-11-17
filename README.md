@@ -1,10 +1,10 @@
-﻿# 拾念 · Notidea
+# 拾念 · Notidea
 
 > 拾念（Notidea）· 本地优先的卡片笔记桌面应用。笔记、附件、AI 结果全部存在本机 SQLite，唯一联网的地方是你自己填的大模型 API。
 >
 > 下载：[Releases](https://github.com/Nitgomare/Notidea/releases/latest) · 源码：MIT
 
-**拾念 / Notidea** 是一个**数据完全在本地**的卡片笔记应用：界面和交互照着 flomo 桌面端做，笔记、图片、标签、AI 结果全部存进本机；唯一需要联网的地方是你自己填的大模型 API。
+**拾念 / Notidea** 是一个**数据完全在本地**的卡片笔记应用：卡片式笔记的界面与交互，笔记、图片、标签、AI 结果全部存进本机；唯一需要联网的地方是你自己填的大模型 API。
 
 - 零第三方依赖，只用 Node 内置模块（`node:sqlite` / `node:http` / `fetch`），Node 22+ 即可。
 - 服务只监听 `127.0.0.1`，局域网其它机器访问不到。
@@ -22,7 +22,7 @@ node server.js          # 默认 http://127.0.0.1:7777
 PORT=8080 node server.js
 ```
 
-**桌面版（独立窗口，像 flomo 那样）**
+**桌面版（独立窗口）**
 
 - **一键安装（推荐）**：到 Releases 下载 `install-notidea.exe`，**双击**。第一步选安装位置（默认 `%LOCALAPPDATA%\notidea`，可改到 `D:\Apps\notidea` 这类非系统盘，会记住上次的选择），之后自动下载完整包、建桌面/开始菜单快捷方式并启动。
 - 也可以下完整包 `notidea-<版本>-win-x64.zip`，解压后双击 `Notidea.exe`（或 `start-desktop.cmd`）。
@@ -54,7 +54,7 @@ Key 只写进本机 `data/llm.json`，页面上永远只显示掩码。不填也
 ## 目录结构
 
 ```text
-flomolocal/
+拾念Notidea/
 ├─ server.js              零依赖 HTTP：静态页 + REST API + AI 流式代理 + 附件上传
 ├─ db.js                  SQLite 存储（memos / tags / memo_tags / files / ai_notes + FTS5）
 ├─ llm.js                 OpenAI 兼容流式客户端 + 提示词加载 + 配置读写
@@ -70,10 +70,10 @@ flomolocal/
 ├─ desktop/               兜底启动（Edge --app，没有 Electron 时用）
 │   ├─ launcher.js        检查/拉起服务，再用独立窗口打开
 │   └─ open.vbs           无黑框启动（桌面快捷方式指向它）
-├─ tools/import-flomo.js  可选：把 flomo 云端历史笔记导进来
+├─ tools/                构建 / 打包 / 冒烟检查脚本
 ├─ tools/make-shortcut.ps1 在真实桌面位置建快捷方式（会读注册表）
 ├─ tools/make-icon.py     生成 assets/ 下的图标
-├─ lib/flomo-api.js       可选：flomo 官方 API 客户端（仅导入用）
+├─ lib/data-dir.js        数据目录解析（可自定义位置）
 ├─ data/                  ← 你的一切数据都在这里
 │   ├─ notidea.db           SQLite 主库
 │   ├─ files/             附件（图片 / 视频 / 语音）
@@ -162,7 +162,7 @@ flomolocal/
 | `Ctrl + Enter` | 保存笔记 / 结束编辑 |
 | `Esc` | 先关弹窗，再清空搜索 / 取消编辑 |
 
-（和 flomo 桌面端一致；窗口图标来自 `assets/notidea.ico`，页面 favicon 是同一张。）
+（窗口图标来自 `assets/notidea.ico`，页面 favicon 是同一张。）
 
 ## 窄窗口 / 小屏
 
@@ -264,16 +264,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-patch.ps1 -From 1
 直接解压新版 zip，把里面的文件覆盖过去；因为包里没有 `data\`，笔记不会被覆盖。
 
 **版本号**只在一个地方改：`version.js`。`server.js` 会把它通过 `/api/version` 和 `/api/bootstrap` 的 `app.version` 暴露出来，界面上也能核对。
-
-## 从 flomo 迁移历史笔记（可选）
-
-```bash
-node tools/import-flomo.js --dry     # 先看会导入多少条
-node tools/import-flomo.js           # 真导入（按 slug 去重，可重复跑）
-node tools/import-flomo.js --since=2026-01-01
-```
-
-token 自动从 `%APPDATA%\flomo卡片笔记\config.json` 读（已登录的 flomo 桌面端），也可 `--token=` 指定。只读你的账号，不写远端。
 
 ## 数据与隐私
 

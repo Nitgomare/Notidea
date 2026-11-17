@@ -1,4 +1,4 @@
-"""生成 flomo local 图标：暖纸底 + 绿色圆 + 白色衬线 f"""
+"""生成 拾念 图标（占位版）"""
 import os
 from PIL import Image, ImageDraw, ImageFont
 
@@ -31,5 +31,5 @@ img.resize((64, 64), Image.LANCZOS).save(os.path.join(OUT, 'icon-64.png'))
 img.resize((32, 32), Image.LANCZOS).save(os.path.join(OUT, 'icon-32.png'))
 
 sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-img.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, 'flomo-local.ico'), sizes=sizes)
+img.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, 'notidea.ico'), sizes=sizes)
 print('icons ->', os.path.abspath(OUT))

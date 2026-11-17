@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
 function Get-RealDesktop {
-  if ($env:FLOMO_SHORTCUT_DESKTOP -and (Test-Path $env:FLOMO_SHORTCUT_DESKTOP)) { return $env:FLOMO_SHORTCUT_DESKTOP }
+  if ($env:NOTIDEA_SHORTCUT_DESKTOP -and (Test-Path $env:NOTIDEA_SHORTCUT_DESKTOP)) { return $env:NOTIDEA_SHORTCUT_DESKTOP }
   try {
     $d = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -ErrorAction Stop).Desktop
     if ($d) {
@@ -112,7 +112,7 @@ try {
 if (-not (Test-Path $linkPath)) { throw ('快捷方式没有生成：' + $linkPath) }
 Write-Host ''
 Write-Host ('  已创建：' + $linkPath) -ForegroundColor Green
-Write-Host '  双击它就会打开独立的笔记窗口（和 flomo 一样，不带浏览器地址栏）'
+Write-Host '  双击它就会打开独立的笔记窗口（不带浏览器地址栏）'
 
 if ($Reveal) {
   Start-Process explorer.exe ('/select,"' + $linkPath + '"')
