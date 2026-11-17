@@ -1,6 +1,6 @@
 {
-  "version": "3.0.0",
-  "notes": "3.0：全新精修 Logo、统一视觉与交互动效；修复重复保存、草稿丢失、搜索竞态、弹窗保存和键盘交互；精简冗余资源。",
+  "version": "3.1.0",
+  "notes": "3.1：修复搜索点击闪现与重复导航动画；侧栏平滑收展、热力图邻域缩放、常驻呼吸Logo；移除记一条按钮、放大日期按钮，精简项目介绍。",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }

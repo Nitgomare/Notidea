@@ -288,6 +288,31 @@ function renderHeatmap() {
   $('#heat-next').disabled = heatMonthStart() === 0;
 }
 
+function resetHeatHover() {
+  $('#heat-grid').querySelectorAll('.heat-cell').forEach((cell) => {
+    cell.style.removeProperty('--heat-scale');
+    cell.classList.remove('heat-hover');
+  });
+}
+$('#heat-grid').addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'touch') return;
+  const grid = e.currentTarget;
+  const bounds = grid.getBoundingClientRect();
+  const css = getComputedStyle(grid);
+  const gapX = parseFloat(css.columnGap) || 0, gapY = parseFloat(css.rowGap) || 0;
+  const width = (grid.clientWidth - (HEAT_WEEKS - 1) * gapX) / HEAT_WEEKS;
+  const height = (grid.clientHeight - parseFloat(css.paddingBottom || 0) - 6 * gapY) / 7;
+  const col = Math.max(0, Math.min(HEAT_WEEKS - 1, Math.floor((e.clientX - bounds.left) / (width + gapX))));
+  const row = Math.max(0, Math.min(6, Math.floor((e.clientY - bounds.top) / (height + gapY))));
+  [...grid.children].forEach((cell, index) => {
+    const dx = Math.abs(Math.floor(index / 7) - col), dy = Math.abs(index % 7 - row);
+    const center = dx === 0 && dy === 0;
+    const scale = center ? 1.55 : Math.max(dx, dy) === 1 ? (dx && dy ? .85 : .72) : 1;
+    cell.style.setProperty('--heat-scale', scale);
+    cell.classList.toggle('heat-hover', center);
+  });
+});
+$('#heat-grid').addEventListener('pointerleave', resetHeatHover);
 $('#heat').addEventListener('mouseover', (e) => {
   const cell = e.target.closest('.heat-cell.day');
   if (!cell) return;
@@ -755,6 +780,19 @@ async function refreshBootstrap() {
 }
 
 async function setFilter(f) {
+  const same = state.filter.type === f.type && state.filter.value === f.value;
+  const v = state.view;
+  const resetAll = f.type === 'all';
+  const hasFilters = state.has || v.onThisDay || (resetAll && (state.search || v.source || v.since || v.until || v.tagMode || v.tag || v.fhas.length));
+  if (same && !hasFilters && f.type !== 'random') return;
+  if (resetAll) {
+    clearTimeout(searchTimer);
+    state.search = '';
+    $('#search').value = '';
+    Object.assign(v, { source: '', since: 0, until: 0, range: '', tagMode: '', tag: '', fhas: [], onThisDay: false });
+    syncFilterPop();
+    syncViewPop();
+  }
   state.filter = f;
   state.has = '';
   state.view.onThisDay = false;
@@ -1031,7 +1069,7 @@ async function saveMemo() {
   finally { memoSaving = false; $('#btn-save').disabled = false; }
 }
 $('#btn-save').onclick = saveMemo;
-$('#btn-new').onclick = () => { draft.focus({ preventScroll: true }); $('#composer').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+function focusComposer() { draft.focus({ preventScroll: true }); $('#composer').scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
 draft.addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveMemo(); }
@@ -1065,7 +1103,7 @@ document.addEventListener('keydown', (e) => {
   // Ctrl+Shift+N 新建
   if (mod && e.shiftKey && key === 'n') {
     e.preventDefault();
-    $('#btn-new').click();
+    focusComposer();
     $('#draft').focus();
     return;
   }
@@ -2471,7 +2509,7 @@ $('#flt-tag').onchange = () => { state.view.tag = $('#flt-tag').value; loadMemos
 
 /* 点外部关闭所有弹层 */
 document.addEventListener('click', (e) => {
-  if (e.target.closest('.pop') || e.target.closest('#btn-view') || e.target.closest('#btn-filter') || e.target.closest('[data-tool="mention"]')) return;
+  if (e.target.closest('.pop') || e.target.closest('#search-wrap') || e.target.closest('#btn-view') || e.target.closest('#btn-filter') || e.target.closest('[data-tool="mention"]')) return;
   closePopsExcept(null);
   $('#btn-view').classList.remove('open');
 });

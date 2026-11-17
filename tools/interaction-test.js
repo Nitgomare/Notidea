@@ -143,6 +143,26 @@ test('reduced motion close and immediate close cancel pending animation timers',
   const animated = searchHarness(); animated.$('#search').focus(); animated.run("popClose($('#search-pop'))"); animated.tick(50);
   animated.run("popClose($('#search-pop'), true); popOpen($('#search-pop'))"); animated.tick(200); assert.equal(animated.$('#search-pop').hidden, false);
 });
+test('click inside search wrapper is not treated as an outside click', () => {
+  let closeCount = 0; let handler;
+  const h = harness(part('/* 点外部关闭所有弹层 */', '/* ---- 输入框工具栏'), {
+    document: { addEventListener(type, fn) { handler = fn; } }, closePopsExcept() { closeCount++; },
+  });
+  handler({ target: { closest: (selector) => selector === '#search-wrap' ? {} : null } });
+  assert.equal(closeCount, 0);
+  handler({ target: { closest: () => null } });
+  assert.equal(closeCount, 1);
+});
+test('active all-notes navigation does not reload but resets applied filters', async () => {
+  let loads = 0;
+  const h = harness(part('async function setFilter(f)', '/* ---------------- 事件：列表'), {
+    state: { filter: {type:'all'}, has:'', search:'', view:{fhas:[]} }, searchTimer: null,
+    clearTimeout() {}, loadMemos: async () => { loads++; }, syncFilterPop() {}, syncViewPop() {},
+  });
+  await h.run("setFilter({type:'all'})"); assert.equal(loads, 0);
+  h.run("state.search='query'"); await h.run("setFilter({type:'all'})");
+  assert.equal(loads, 1); assert.equal(h.run('state.search'), '');
+});
 test('keyboard and filter regressions remain guarded', () => {
   assert.ok(!source.includes("if (e.key === 'Tab') { e.preventDefault()"));
   assert.ok(source.includes('if (r || tm || fh || fs'));

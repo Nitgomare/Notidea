@@ -1333,6 +1333,8 @@ body.select-mode .memo-actions, body.select-mode .ai-fab { visibility: hidden; }
 .heat-months span { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .heat .heat-head { margin: 6px 0 0; }
 .heat .heat-head span { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+#heat-prev, #heat-next { width: 36px; height: 36px; flex: 0 0 36px; font-size: 24px; border-radius: 10px; }
+#heat-prev:hover, #heat-next:hover { background: var(--accent-soft); color: var(--accent-ink); }
 #heat-next:disabled { opacity: .3; pointer-events: none; }
 
 /* 热力图气泡：固定一行，绝不被挤压 */
@@ -1527,6 +1529,29 @@ body.shell .day-sep button { -webkit-app-region: no-drag; }
 .update-dialog h3 b { font-family: inherit; color: var(--accent); }
 #up-status { min-height: 16px; margin: 2px 0 4px; }
 
+/* 热力图以固定网格坐标驱动缩放，避免布局重排。 */
+.heat-grid.weeks .heat-cell.day {
+  scale: var(--heat-scale, 1);
+  transition: scale 220ms cubic-bezier(.2, .8, .2, 1);
+}
+.heat-grid.weeks .heat-cell.day:hover { transform: none; box-shadow: none; }
+.heat-grid.weeks .heat-cell.heat-hover { z-index: 2; }
+.sidebar .brand {
+  position: sticky; top: -18px; z-index: 20;
+  background: #f8f8fc; padding-top: 12px; padding-bottom: 12px;
+  flex-shrink: 0;
+}
+.brand-logo svg { animation: brandBreath 3.6s ease-in-out infinite; transform-origin: center; }
+@keyframes brandBreath {
+  0%, 100% { scale: .94; opacity: .82; }
+  50% { scale: 1; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heat-grid.weeks .heat-cell.day { scale: 1; }
+  .brand-logo svg { animation: none !important; }
+}
+[data-reduce-motion="true"] .heat-grid.weeks .heat-cell.day { scale: 1; }
+[data-reduce-motion="true"] .brand-logo svg { animation: none !important; }
 /* 品牌与交互精修：静止时安静，动作发生时反馈。 */
 :root {
   --motion-fast: 160ms;
@@ -1594,6 +1619,21 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   .brand:hover .brand-logo, .heat-cell.day:hover, button:active { transform: none !important; }
+}
+@media (min-width: 761px) {
+  body:not(.single-mode) .app, body:not(.single-mode) .app.rail-off {
+    grid-template-columns: var(--side-w) minmax(0, 1fr);
+    transition: grid-template-columns 360ms var(--motion-settle);
+  }
+  body:not(.single-mode) .app.side-off, body:not(.single-mode) .app.side-off.rail-off { grid-template-columns: 0px minmax(0, 1fr); }
+  body:not(.single-mode) .app .sidebar {
+    width: var(--side-w); min-width: 0; animation: none;
+    transition: transform 360ms var(--motion-settle), opacity 240ms ease, visibility 360ms;
+    transform: translateX(0); opacity: 1; visibility: visible;
+  }
+  body:not(.single-mode) .app.side-off .sidebar {
+    display: flex; transform: translateX(-100%); opacity: 0; visibility: hidden; pointer-events: none;
+  }
 }
 [data-reduce-motion="true"] *, [data-reduce-motion="true"] *::before, [data-reduce-motion="true"] *::after {
   animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important;
