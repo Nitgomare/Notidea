@@ -22,7 +22,11 @@ node server.js          # 默认 http://127.0.0.1:7777
 PORT=8080 node server.js
 ```
 
-**桌面版（独立窗口，像 flomo 那样）**：双击 `start-desktop.cmd`，或桌面上的 **flomo local** 快捷方式。
+**桌面版（独立窗口，像 flomo 那样）**
+
+- **一键安装（推荐）**：到 Releases 下载 `install-flomo-local.exe`，**双击**即可。它会自动下载最新完整包、装到 `%LOCALAPPDATA%\flomo-local`、在桌面和开始菜单建「flomo local」快捷方式，并直接启动。以后双击桌面图标就行。
+- 也可以下完整包 `flomo-local-<版本>-win-x64.zip`，解压后双击 `flomo-local.exe`（或 `start-desktop.cmd`）。
+- 源码目录想跑桌面版：`npm install` 之后双击 `start-desktop.cmd`，或 `npm start`。
 
 Windows 上走 **Electron 壳**（`flomo-local.exe` + `electron/main.js`）：没有系统标题栏，页面直接铺满窗口；拖动、缩放、双击最大化、边缘光标全部由 Electron / 系统处理；窗口按钮（— □ ✕）画在页面顶栏右侧，最大化时形状会变。窗口大小/位置记在 `data/shell-window.json`。
 
