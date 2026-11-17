@@ -1,11 +1,12 @@
-' 静默启动 flomo local 独立窗口（不弹黑框）
+' 静默启动 flomo local（优先 Electron 壳，其次 start-desktop.cmd）
 Set fso = CreateObject("Scripting.FileSystemObject")
-base = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
 Set sh = CreateObject("WScript.Shell")
-If fso.FileExists(base & "\runtime\node.exe") Then
-  exe = base & "\runtime\node.exe"
-Else
-  exe = "node"
-End If
+base = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
 sh.CurrentDirectory = base
-sh.Run """" & exe & """ """ & base & "\desktop\launcher.js""", 0, False
+If fso.FileExists(base & "\flomo-local.exe") Then
+  sh.Run """" & base & "\flomo-local.exe"" """ & base & """", 0, False
+ElseIf fso.FileExists(base & "\start-desktop.cmd") Then
+  sh.Run """" & base & "\start-desktop.cmd""", 0, False
+Else
+  sh.Run """" & base & "\runtime\node.exe"" """ & base & "\desktop\launcher.js""", 0, False
+End If

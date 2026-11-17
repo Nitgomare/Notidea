@@ -1,34 +1,25 @@
-flomo local — Windows x64 便携版
-================================
+﻿flomo local — Windows x64
+=========================
 
-用法
+安装
 ----
-1. 解压到任意可写目录（不要放 C:\Program Files，那里写不了 data\）
-2. 双击 start-desktop.cmd  → 独立窗口（推荐）
-   或 start.cmd             → 在浏览器里打开 http://127.0.0.1:7777
-3. 想要桌面图标：双击 创建桌面快捷方式.cmd
-   会问你放在哪个文件夹（直接回车 = 桌面），然后生成一个双击即开
-   独立窗口的图标；也可以自己指定别的目录（比如开始菜单）。
-   命令行等价：  powershell -File tools\make-shortcut.ps1 -Dest "D:\某目录"
+推荐：双击 install-flomo-local.exe（Releases 里的安装器）
+  1. 选安装位置（默认 %LOCALAPPDATA%\flomo-local，可以装到 D:\Apps\flomo-local）
+  2. 自动下载完整包、建桌面和开始菜单快捷方式、直接启动
 
-你的数据
---------
-全部在本目录的 data\ 里：
+不想用安装器：解压这份压缩包到任意可写目录，双击 start-desktop.cmd。
+
+数据
+----
+默认在安装目录下的 data\：
   data\flomo.db   SQLite 主库（笔记、标签、AI 结果）
   data\files\     图片 / 视频 / 语音附件
   data\llm.json   模型配置（含 API Key，别外传）
 
-换电脑：整个文件夹拷走即可。
-升级：只替换程序文件，保留 data\ 不动。
+想换位置：设置 → 数据目录 →「更改…」，可以把现有笔记一起复制过去。
+指针记在 %APPDATA%\flomo-local\data-dir.txt，重装程序不会动它。
 
-AI
----
-左下角「设置」填自己的 OpenAI 兼容接口（Base URL / 模型 / Key），
-例如 https://api.deepseek.com/v1 + deepseek-chat。
-不填也能记笔记，只是 AI 技能会提示未配置。
-
-说明
+托盘
 ----
-- 服务只监听 127.0.0.1，局域网其它机器访问不到。
-- 第一次运行 Windows 可能弹 SmartScreen：点「更多信息 → 仍要运行」。
-- 桌面窗口用 Edge 的应用模式（和 WebView2 同内核）；没有 Edge 会自动退回默认浏览器。
+点 ✕ 会缩到系统托盘（Windows 11 可能在「^ 隐藏的图标」里），
+托盘右键菜单有「打开 flomo local」和「退出」。

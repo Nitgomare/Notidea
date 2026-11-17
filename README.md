@@ -36,9 +36,9 @@ Windows 上走 **Electron 壳**（`flomo-local.exe` + `electron/main.js`）：�
 
 桌面快捷方式由 `tools/make-shortcut.ps1` 生成：它会去注册表读**真实的桌面路径**（有的机器把「桌面」重定向到 D 盘），再在那里建 `flomo local.lnk`，旧位置残留的会一并删掉。桌面被搬走后重跑一次即可。
 
-### macOS（暂不提供）
+### macOS
 
-macOS 版还在调试，**1.3.5 起不再随 release 发布 mac 包**。代码里保留了跨平台分支（`lib/platform.js`：浏览器路径、profile 目录、`open` 命令、桌面目录；以及 `apply.sh` 更新脚本），等能在真机上跑通再恢复发布。Windows 行为不受影响。
+**不提供 mac 包。** `lib/platform.js` 里保留了跨平台分支（浏览器路径、`open` 命令、桌面目录、`apply.sh` 更新脚本），但没有 mac 脚本或发布产物。
 
 
 首次打开点左下角「设置」，填三样：
@@ -67,7 +67,7 @@ flomolocal/
 │   └─ ask.md             问笔记
 ├─ public/                index.html / style.css / app.js（无框架，原生 DOM）
 ├─ assets/                图标（icon.png / flomo-local.ico，由 tools/make-icon.py 生成）
-├─ desktop/               桌面壳（WebView2 / Edge --app）
+├─ desktop/               兜底启动（Edge --app，没有 Electron 时用）
 │   ├─ launcher.js        检查/拉起服务，再用独立窗口打开
 │   └─ open.vbs           无黑框启动（桌面快捷方式指向它）
 ├─ tools/import-flomo.js  可选：把 flomo 云端历史笔记导进来
