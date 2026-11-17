@@ -498,10 +498,7 @@ async function route(req, res) {
         const latest = info.latest;
         setTimeout(() => {
           try {
-            const child = spawn(IS_WIN ? 'powershell.exe' : '/bin/sh',
-              IS_WIN ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updater] : [updater], {
-                detached: true, stdio: 'ignore', windowsHide: true, cwd: __dirname,
-              });
+            const child = require('./lib/updater-launcher').launchUpdater(updater, __dirname, IS_WIN);
             child.once('error', (e) => console.error('更新器启动失败，保留服务：', e.message));
             child.once('spawn', () => { child.unref(); setTimeout(() => process.exit(0), 300); });
           } catch (e) { console.error('更新器启动失败，保留服务：', e.message); }
