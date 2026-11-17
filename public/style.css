@@ -1430,7 +1430,7 @@ body.select-mode .memo-actions, body.select-mode .ai-fab { visibility: hidden; }
 /* ---------- 无边框外壳（WebView2）: 页面上没有系统标题栏，按钮画在页面右上角 ---------- */
 .win-controls { display: none; }
 body.shell .win-controls {
-  display: flex; gap: 2px; position: fixed; top: 18px; right: 24px; z-index: 60;
+  display: flex; gap: 2px; flex: 0 0 auto; align-items: center; margin-left: 4px;
 }
 body.shell .win-controls button {
   width: 30px; height: 24px; border: 0; border-radius: 7px; background: transparent;
@@ -1440,7 +1440,6 @@ body.shell .win-controls button {
 }
 body.shell .win-controls button:hover { background: rgba(31, 41, 51, .08); color: var(--ink); }
 body.shell .win-controls button[data-win="close"]:hover { background: #e5484d; color: #fff; }
-body.shell .main-head { padding-right: 132px; }
 body.shell .sidebar { padding-top: 18px; }
 
 /* 侧栏底栏：单个齿轮按钮 */

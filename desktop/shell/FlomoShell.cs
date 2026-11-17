@@ -17,6 +17,9 @@ namespace FlomoShell
         [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
         [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr wp, IntPtr lp);
         [DllImport("user32.dll")] public static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] public static extern IntPtr SetCapture(IntPtr h);
+        [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
         [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
         [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool redraw);
         [DllImport("gdi32.dll")] public static extern IntPtr CreatePolygonRgn(POINT[] pts, int count, int mode);
@@ -36,6 +39,11 @@ namespace FlomoShell
         private readonly string _stateFile;
         private WebView2 _web;
         private Rectangle _restore = Rectangle.Empty;
+        private bool _dragging;
+        private bool _dragMoved;
+        private Timer _dragTimer;
+        private Native.POINT _dragCursor;
+        private Point _dragWin;
         private bool _isMax;
 
         public ShellForm(string url, string root)
@@ -107,6 +115,7 @@ namespace FlomoShell
         {
             string json;
             try { json = e.WebMessageAsJson ?? ""; } catch { return; }
+            LogAction("msg " + json);
             var hit = System.Text.RegularExpressions.Regex.Match(json, "\"hit:(\\d+)\"");
             if (hit.Success)
             {
@@ -116,10 +125,10 @@ namespace FlomoShell
             if (json.IndexOf("\"minimize\"", StringComparison.Ordinal) >= 0) WindowState = FormWindowState.Minimized;
             else if (json.IndexOf("\"maximize\"", StringComparison.Ordinal) >= 0) ToggleMaximize();
             else if (json.IndexOf("\"close\"", StringComparison.Ordinal) >= 0) Close();
-            else if (json.IndexOf("\"drag\"", StringComparison.Ordinal) >= 0) StartSystemHit(HTCAPTION);
+            else if (json.IndexOf("\"drag\"", StringComparison.Ordinal) >= 0) StartDrag();
         }
 
-        /// <summary>把拖动/缩放交给系统窗口循环（页面在边缘按下时发 hit:N 过来）</summary>
+        /// <summary>把缩放交给系统窗口循环（页面在边缘按下时发 hit:N 过来）</summary>
         private void StartSystemHit(int ht)
         {
             try
@@ -128,6 +137,39 @@ namespace FlomoShell
                 Native.SendMessage(Handle, 0x00A1 /* WM_NCLBUTTONDOWN */, (IntPtr)ht, IntPtr.Zero);
             }
             catch { }
+        }
+
+        /// <summary>自己拖窗口：用定时器跟光标，不抢鼠标捕获，否则页面的双击事件收不到</summary>
+        private void StartDrag()
+        {
+            Native.GetCursorPos(out _dragCursor);
+            _dragWin = Location;
+            _dragging = true;
+            _dragMoved = false;
+            if (_dragTimer == null)
+            {
+                _dragTimer = new Timer { Interval = 15 };
+                _dragTimer.Tick += DragTick;
+            }
+            _dragTimer.Start();
+        }
+
+        private void DragTick(object sender, EventArgs e)
+        {
+            if (!_dragging) { _dragTimer.Stop(); return; }
+            if ((Native.GetAsyncKeyState(0x01) & 0x8000) == 0)   // 左键已抬起
+            {
+                _dragging = false;
+                _dragMoved = false;
+                _dragTimer.Stop();
+                return;
+            }
+            Native.POINT c;
+            Native.GetCursorPos(out c);
+            int dx = c.X - _dragCursor.X, dy = c.Y - _dragCursor.Y;
+            if (!_dragMoved && Math.Abs(dx) < 3 && Math.Abs(dy) < 3) return;   // 3px 内不算拖动，保留双击
+            _dragMoved = true;
+            Location = new Point(_dragWin.X + dx, _dragWin.Y + dy);
         }
 
         private void PostState()
@@ -143,21 +185,34 @@ namespace FlomoShell
 
         private void ToggleMaximize()
         {
-            if (_isMax || WindowState == FormWindowState.Maximized)
+            var wa = Screen.FromControl(this).WorkingArea;
+            if (_isMax)
             {
                 _isMax = false;
-                WindowState = FormWindowState.Normal;
-                if (_restore != Rectangle.Empty) Bounds = _restore;
+                if (_restore.Width >= 720 && _restore.Height >= 520) Bounds = _restore;
+                else Bounds = new Rectangle(wa.X + 80, wa.Y + 60, 1220, 860);
             }
             else
             {
-                _restore = Bounds;
+                // 只有当前不是"铺满工作区"时才记恢复尺寸，避免把最大化尺寸记成恢复尺寸
+                if (Bounds.Width != wa.Width || Bounds.Height != wa.Height) _restore = Bounds;
                 _isMax = true;
-                WindowState = FormWindowState.Normal;
-                Bounds = Screen.FromControl(this).WorkingArea;
+                Bounds = wa;
             }
             ApplyRoundedCorners();
             PostState();
+            LogAction(_isMax ? "maximize" : "restore");
+        }
+
+        private void LogAction(string what)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(_root, "data"));
+                File.AppendAllText(Path.Combine(_root, "data", "shell.log"),
+                    "[" + DateTime.Now.ToString("HH:mm:ss") + "] " + what + " " + Bounds + Environment.NewLine, Encoding.UTF8);
+            }
+            catch { }
         }
 
         protected override CreateParams CreateParams
@@ -167,7 +222,7 @@ namespace FlomoShell
                 var cp = base.CreateParams;
                 // 让 DWM 把它当标准窗口：有阴影、能圆角；仍然没有标题栏
                 cp.Style |= 0x00040000;                     // WS_THICKFRAME
-                cp.Style |= 0x00020000 | 0x00010000;        // WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+                cp.Style |= 0x00020000;                     // WS_MINIMIZEBOX（不要 MAXIMIZEBOX：系统最大化会盖住任务栏）
                 return cp;
             }
         }
@@ -245,12 +300,6 @@ namespace FlomoShell
                 if (right) { m.Result = (IntPtr)HTRIGHT; return; }
                 if (bottom) { m.Result = (IntPtr)HTBOTTOM; return; }
                 if (top) { m.Result = (IntPtr)HTTOP; return; }
-                if (p.Y < 16) { m.Result = (IntPtr)HTCAPTION; return; }   // 顶部 16px 可拖动
-                return;
-            }
-            if (m.Msg == WM_NCLBUTTONDBLCLK)
-            {
-                ToggleMaximize();
                 return;
             }
             base.WndProc(ref m);

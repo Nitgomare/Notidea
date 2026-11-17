@@ -1529,25 +1529,41 @@ if (shellHost) {
     box.querySelector('[data-win="max"]').onclick = () => { shellMax = !shellMax; applyMaxGlyph(shellMax); winSend('maximize'); };
     box.querySelector('[data-win="close"]').onclick = () => winSend('close');
   }
-  // 边缘缩放 / 顶部拖动：页面自己判定，再把命中的 HT 码交给宿主窗口（WebView2 会吃掉 WM_NCHITTEST）
-  const EDGE = 6, DRAG_H = 14;
+  // 边缘缩放 / 顶部拖动：页面自己判定，再把命中码交给宿主窗口
+  // （WebView2 覆盖整个客户区，宿主的 WM_NCHITTEST 收不到，只能从页面发起）
+  const EDGE = 6, DRAG_H = 10;
+  const NOT_DRAG = 'button, input, textarea, a, select, .tag, .pop, .chip, .memo, .composer';
+  const inDragZone = (el) => {
+    if (!el || !el.closest) return false;
+    if (el.closest(NOT_DRAG)) return false;
+    return !!(el.closest('.topbar') || el.closest('.brand') || el.closest('.day-sep') || el.closest('.list-head'));
+  };
   const hitFor = (x, y, w, h) => {
     if (y <= EDGE) return x <= EDGE ? 13 : (x >= w - EDGE ? 14 : 12);
     if (y >= h - EDGE) return x <= EDGE ? 16 : (x >= w - EDGE ? 17 : 15);
     if (x <= EDGE) return 10;
     if (x >= w - EDGE) return 11;
-    if (y <= DRAG_H) return 2;
     return 0;
   };
+  const CURSORS = { 10: 'ew-resize', 11: 'ew-resize', 12: 'ns-resize', 15: 'ns-resize', 13: 'nwse-resize', 17: 'nwse-resize', 14: 'nesw-resize', 16: 'nesw-resize' };
   document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const ht = hitFor(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
-    if (!ht) return;
-    e.preventDefault();
-    winSend('hit:' + ht);
+    if (ht) { e.preventDefault(); winSend('hit:' + ht); return; }
+    if (e.clientY <= DRAG_H || inDragZone(e.target)) { e.preventDefault(); winSend('drag'); }
+  }, true);
+  document.addEventListener('mousemove', (e) => {
+    const ht = hitFor(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+    const cur = CURSORS[ht] || '';
+    if (document.body.style.cursor !== cur) document.body.style.cursor = cur;
   }, true);
   document.addEventListener('dblclick', (e) => {
-    if (e.clientY <= DRAG_H) { e.preventDefault(); shellMax = !shellMax; applyMaxGlyph(shellMax); winSend('maximize'); }
+    if (e.clientY <= DRAG_H || inDragZone(e.target)) {
+      e.preventDefault();
+      shellMax = !shellMax;
+      applyMaxGlyph(shellMax);
+      winSend('maximize');
+    }
   }, true);
   shellHost.addEventListener('message', (e) => {
     const d = e.data || {};
@@ -2396,6 +2412,19 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   const d = b.closest('dialog');
   if (d && d.open) d.close();
+});
+
+/* 点对话框外面的遮罩就关掉（AI 洞察除外：生成中误点会中断请求） */
+document.querySelectorAll('dialog.dialog').forEach((d) => {
+  if (d.id === 'insight') return;
+  let armed = false;
+  d.addEventListener('mousedown', (e) => {
+    armed = e.target === d;   // 只在遮罩上按下才算，避免框内选字拖到外面松开时误关
+  });
+  d.addEventListener('click', (e) => {
+    if (armed && e.target === d) d.close();
+    armed = false;
+  });
 });
 
 /* 热力图气泡挂到 body 下：侧栏的 backdrop-filter 会把 fixed 元素困在侧栏里被裁切 */
