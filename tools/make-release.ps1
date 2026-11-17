@@ -1,4 +1,4 @@
-﻿# 打包 flomo local（Windows）
+# 打包 flomo local（Windows）
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-release.ps1
 # 产出：
 #   dist\flomo-local-<版本>-win-x64.zip   完整包（Electron 壳 + Node 运行时）
@@ -85,6 +85,14 @@ Compress-Archive -Path (Join-Path $full '*') -DestinationPath $zip -CompressionL
 $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 Write-Output ('release zip : ' + $zip + ' (' + $mb + ' MB)')
 
+# ---------- 3.5) 冒烟检查：起服务验接口（提示词解析、数据目录、版本一致性） ----------
+$smoke = Join-Path $root 'tools\smoke-test.ps1'
+if (Test-Path $smoke) {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $smoke -AppDir $full -Port 7783
+  if ($LASTEXITCODE -ne 0) {
+    throw '冒烟检查没通过，打包中止（看上面的 [FAIL] 项）'
+  }
+}
 # ---------- 4) 镜像（jsDelivr / raw 兜底） ----------
 $mirrorDir = Join-Path $root 'updates'
 New-Item -ItemType Directory -Path $mirrorDir -Force | Out-Null
