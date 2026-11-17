@@ -1590,9 +1590,11 @@ const shellBridge = (() => {
 
 if (shellBridge) {
   document.body.classList.add('shell');
+  const ICON_MAX = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.6" y="3.6" width="8.8" height="8.8" rx="2"/></svg>';
+  const ICON_RESTORE = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.6" y="5.2" width="8.2" height="8.2" rx="1.8"/><path d="M5.2 5.2V4a1.5 1.5 0 0 1 1.5-1.5h4.6A1.5 1.5 0 0 1 12.8 4v4.6a1.5 1.5 0 0 1-1.5 1.5h-1.1"/></svg>';
   const applyMaxGlyph = (v) => {
     const b = document.querySelector('[data-win="max"]');
-    if (b) b.textContent = v ? '\u2750' : '\u25A1';
+    if (b) b.innerHTML = v ? ICON_RESTORE : ICON_MAX;
     document.body.classList.toggle('is-max', !!v);
   };
   const box = $('#win-controls');

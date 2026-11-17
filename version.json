@@ -1,6 +1,6 @@
 {
-  "version": "1.4.2",
-  "notes": "后台常驻：关闭窗口缩到托盘，托盘图标可打开/退出",
+  "version": "1.4.3",
+  "notes": "窗口按钮换成 SVG 图标并加大；侧栏整体放大一档（292px、字号与间距上调）",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }
