@@ -86,6 +86,7 @@
     <div class="main-head">
     <header class="topbar">
       <button class="icon-btn mobile-only" id="btn-side" title="导航">☰</button>
+      <button class="icon-btn side-expand" id="btn-expand" title="展开侧栏">☰</button>
       <div class="view-wrap">
         <button class="view-title" id="btn-view" title="排序 / 来源 / 多选 / 导出" aria-haspopup="menu">
           <h2 id="list-title">全部笔记</h2>
@@ -307,6 +308,12 @@
       <button type="button" class="ghost-btn" id="btn-shortcut">创建桌面快捷方式</button>
     </div>
     <p class="muted small" id="shortcut-note"></p>
+    <div class="update-row">
+      <span class="muted small">数据目录</span>
+      <button type="button" class="ghost-btn" id="btn-data-dir">更改…</button>
+      <button type="button" class="ghost-btn" id="btn-data-open">打开</button>
+    </div>
+    <p class="muted small" id="data-dir-note"></p>
     <div class="dialog-actions">
       <button type="button" class="ghost-btn" data-close-dialog>取消</button>
       <button class="primary-btn" id="btn-cfg-save" value="default">保存</button>

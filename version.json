@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "notes": "桌面壳换成 Electron：原生窗口拖动/缩放/双击最大化、系统级窗口按钮，去掉自绘 WebView2 外壳；仓库新增 electron/main.js、preload.js 与 package.json",
+  "version": "1.4.1",
+  "notes": "数据目录可自定义（%APPDATA%\\flomo-local\\data-dir.txt 指针 + 设置里切换/复制迁移/重启）；修复侧栏收起后没有展开按钮、主区反而变窄",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }

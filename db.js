@@ -4,10 +4,9 @@ const path = require('path');
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
-const DATA_DIR = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const { DATA_DIR, DB_FILE } = require('./lib/data-dir');
 
-const db = new DatabaseSync(path.join(DATA_DIR, 'flomo.db'));
+const db = new DatabaseSync(DB_FILE);
 
 db.exec(`
   PRAGMA journal_mode = WAL;

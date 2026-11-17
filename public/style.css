@@ -59,7 +59,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   overflow: hidden;
 }
 html, body { overflow: hidden; }
-.app.side-off { grid-template-columns: minmax(0, 1fr) var(--rail-w); }
+.app.side-off { grid-template-columns: minmax(0, 1fr); }
 .app.side-off .sidebar { display: none; }
 .app.rail-off { grid-template-columns: var(--side-w) minmax(0, 1fr) 0; }
 .app.rail-off .rail { display: none; }
@@ -1096,7 +1096,7 @@ body.float-mode { background: #eeeef6; }
 
 /* ---------------- AI 浮动按钮 + 浮动面板（仿 flomo 右下角 AI 入口） ---------------- */
 .app, .app.rail-off { grid-template-columns: var(--side-w) minmax(0, 1fr); }
-.app.side-off { grid-template-columns: minmax(0, 1fr) var(--rail-w); }
+.app.side-off { grid-template-columns: minmax(0, 1fr); }
 .app.side-off.rail-off { grid-template-columns: minmax(0, 1fr); }
 .rail, .app.rail-off .rail {
   display: flex; position: fixed; z-index: 80;
@@ -1458,3 +1458,7 @@ body.shell .topbar .search-wrap *,
 body.shell .brand button,
 body.shell .brand a,
 body.shell .day-sep button { -webkit-app-region: no-drag; }
+
+/* 侧栏收起后留在顶栏的展开按钮 */
+.side-expand { display: none; }
+.app.side-off .side-expand { display: inline-flex; }

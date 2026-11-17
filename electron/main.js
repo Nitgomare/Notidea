@@ -150,11 +150,23 @@ async function createWindow() {
   win.loadURL(APP_URL);
 }
 
+ipcMain.handle('pick-dir', async (_e, current) => {
+  const r = await dialog.showOpenDialog(win, {
+    title: '选择数据目录',
+    defaultPath: current || app.getPath('documents'),
+    properties: ['openDirectory', 'createDirectory'],
+    buttonLabel: '用这个目录',
+  });
+  if (r.canceled || !r.filePaths || !r.filePaths.length) return '';
+  return r.filePaths[0];
+});
+
 ipcMain.on('shell', (_event, action) => {
   if (!win || win.isDestroyed()) return;
   if (action === 'minimize') win.minimize();
   else if (action === 'maximize') { if (win.isMaximized()) win.unmaximize(); else win.maximize(); }
   else if (action === 'close') win.close();
+  else if (action === 'relaunch') { app.relaunch(); app.exit(0); }
 });
 
 app.whenReady().then(createWindow);

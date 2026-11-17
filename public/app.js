@@ -1098,7 +1098,16 @@ $('#scrim').onclick = () => {
   APP().classList.remove('rail-open');
   syncScrim();
 };
-$('#btn-collapse').onclick = () => document.querySelector('.app').classList.toggle('side-off');
+const btnExpand = $('#btn-expand');
+const syncSideExpand = () => { if (btnExpand) btnExpand.hidden = !APP().classList.contains('side-off'); };
+$('#btn-collapse').onclick = () => {
+  APP().classList.toggle('side-off');
+  syncSideExpand();
+};
+if (btnExpand) {
+  btnExpand.onclick = () => { APP().classList.remove('side-off'); syncSideExpand(); };
+}
+syncSideExpand();
 
 let currentAi = { skill: null, text: '', payload: {} };
 
@@ -1223,6 +1232,7 @@ $('#btn-settings').onclick = async () => {
   $('#app-version').textContent = 'v' + ((b.app && b.app.version) || '—');
   $('#update-note').textContent = '';
   $('#settings').showModal();
+  refreshDataDir();
 };
 
 $('#btn-check-update').onclick = async () => {
@@ -1292,6 +1302,53 @@ $('#btn-shortcut').onclick = async () => {
     note.textContent = '已创建：' + r.path;
   } catch (e) {
     note.textContent = '创建失败：' + e.message + '（也可以双击包里的 创建桌面快捷方式.cmd）';
+  }
+};
+/* ---- 数据目录：可自定义，重装/升级不会动它 ---- */
+const dataDirState = { dir: '' };
+async function refreshDataDir() {
+  const note = $('#data-dir-note');
+  try {
+    const d = await api('/api/data-dir');
+    dataDirState.dir = d.dir;
+    if (note) {
+      const extra = d.env ? '（由环境变量 FLOMO_DATA_DIR 指定）' : '';
+      note.textContent = d.dir + extra;
+      note.title = '指针文件：' + d.config;
+    }
+  } catch (e) {
+    if (note) note.textContent = '读取失败：' + e.message;
+  }
+}
+$('#btn-data-dir').onclick = async () => {
+  let dir = '';
+  try {
+    if (window.__shell && window.__shell.pickDir) {
+      dir = await window.__shell.pickDir(dataDirState.dir);
+    } else {
+      dir = window.prompt('新的数据目录（留空取消）：', dataDirState.dir || '');
+    }
+  } catch (e) { /* 取消 */ }
+  dir = String(dir || '').trim();
+  if (!dir) return;
+  if (!window.confirm('把现有笔记复制到：\n' + dir + '\n\n然后重启应用？')) return;
+  try {
+    const r = await api('/api/data-dir', { method: 'POST', body: { dir, copy: true } });
+    await refreshDataDir();
+    if (window.__shell && window.__shell.post) {
+      window.__shell.post('relaunch');
+    } else {
+      toast('已切换数据目录，重启应用后生效');
+    }
+  } catch (e) {
+    toast('切换失败：' + e.message);
+  }
+};
+$('#btn-data-open').onclick = async () => {
+  try {
+    await api('/api/open-data-dir', { method: 'POST' });
+  } catch (e) {
+    toast('打不开：' + e.message);
   }
 };
 $('#btn-cfg-save').onclick = async () => {

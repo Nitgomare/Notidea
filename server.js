@@ -27,7 +27,8 @@ const llm = require('./llm');
 const PORT = Number(process.env.PORT || 7777);
 const HOST = '127.0.0.1';
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const FILES_DIR = path.join(__dirname, 'data', 'files');
+const dataDir = require('./lib/data-dir');
+const { DATA_DIR, DB_FILE, FILES_DIR } = dataDir;
 if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });
 
 const UPLOAD_EXT = {
@@ -186,7 +187,7 @@ function buildIcs(items) {
   return lines.map(foldIcsLine).join('\r\n') + '\r\n';
 }
 function writeIcs(c, memo) {
-  const dir = path.join(__dirname, 'data', 'calendar');
+  const dir = path.join(DATA_DIR, 'calendar');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'remind-' + c.id + '.ics');
   const excerpt = memo ? String(memo.content || '').replace(/\s+/g, ' ').slice(0, 200) : '';
@@ -467,7 +468,7 @@ async function route(req, res) {
         heatmap: dbm.heatmap(154),
         prompts: llm.listPrompts(),
         llm: llm.publicConfig(),
-        storage: { path: path.join(__dirname, 'data', 'flomo.db'), fts: dbm.fts },
+        storage: { path: DB_FILE, dir: DATA_DIR, fts: dbm.fts },
         reminders: dbm.reminderCount(),
         app: { version: currentVersion() },
       });
@@ -523,6 +524,47 @@ async function route(req, res) {
         ...(body.temperature !== undefined ? { temperature: Number(body.temperature) } : {}),
       });
       return json(res, 200, llm.publicConfig(next));
+    }
+
+    if (p === '/api/open-data-dir' && req.method === 'POST') {
+      try { platform.openPath(DATA_DIR); return json(res, 200, { ok: true, dir: DATA_DIR }); }
+      catch (e) { return json(res, 500, { error: String(e.message || e) }); }
+    }    // ---- 数据目录 ----
+    if (p === '/api/data-dir' && req.method === 'GET') {
+      return json(res, 200, {
+        dir: DATA_DIR,
+        config: dataDir.CONFIG_FILE,
+        defaultDir: dataDir.DEFAULT_DIR,
+        env: dataDir.ENV_DIR,
+      });
+    }
+    if (p === '/api/data-dir' && req.method === 'POST') {
+      const body = await readBody(req);
+      const target = String(body.dir || '').trim();
+      if (!target) return json(res, 400, { error: '路径不能为空' });
+      let resolved;
+      try {
+        resolved = dataDir.setPointer(target);
+      } catch (e) {
+        return json(res, 400, { error: '无法写入该目录：' + String(e.message || e) });
+      }
+      let copied = 0;
+      if (body.copy && resolved !== DATA_DIR) {
+        try {
+          fs.mkdirSync(resolved, { recursive: true });
+          for (const f of ['flomo.db', 'flomo.db-wal', 'flomo.db-shm']) {
+            const src = path.join(DATA_DIR, f);
+            if (fs.existsSync(src)) { fs.copyFileSync(src, path.join(resolved, f)); copied++; }
+          }
+          const srcFiles = path.join(DATA_DIR, 'files');
+          if (fs.existsSync(srcFiles)) {
+            fs.cpSync(srcFiles, path.join(resolved, 'files'), { recursive: true });
+          }
+        } catch (e) {
+          return json(res, 500, { error: '复制数据失败：' + String(e.message || e) });
+        }
+      }
+      return json(res, 200, { ok: true, dir: resolved, copied, restart: true });
     }
 
     // ---- 笔记 ----
