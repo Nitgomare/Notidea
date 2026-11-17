@@ -1,6 +1,6 @@
 {
-  "version": "1.3.7",
-  "notes": "桌面窗口改为无边框 WebView2 外壳：没有系统标题栏、页面铺满窗口、四角是曲率连续的超椭圆圆角、窗口按钮画在页面里；WebView2 缺失时自动回退 Edge 应用窗口",
+  "version": "1.3.8",
+  "notes": "无边框外壳修复：拖动/边缘缩放/双击最大化原来无效（WebView2 吃掉了 WM_NCHITTEST），改为页面判定后交给系统窗口循环；最大/还原图标随状态切换；圆角改回正圆弧；滚动条与窗口边缘留白；侧栏底栏改为齿轮图标并去掉导出；修复隐藏侧栏后主区域被挤成 0 宽",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
   "released_at": "2026-11-17"
 }

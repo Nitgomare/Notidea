@@ -1307,7 +1307,8 @@ $('#btn-cfg-save').onclick = async () => {
   await refreshBootstrap();
   toast('已保存模型配置');
 };
-$('#btn-export').onclick = () => { window.location.href = '/api/export'; };
+const btnExport = $('#btn-export');
+if (btnExport) btnExport.onclick = () => { window.location.href = '/api/export'; };
 $('#btn-more').onclick = () => loadMemos({ append: true });
 
 /* ---------------- AI 洞察 ---------------- */
@@ -1515,13 +1516,45 @@ const shellHost = (window.chrome && window.chrome.webview) ? window.chrome.webvi
 if (shellHost) {
   document.body.classList.add('shell');
   const winSend = (action) => { try { shellHost.postMessage({ type: 'win', action }); } catch (e) { /* 忽略 */ } };
+  let shellMax = false;
+  const applyMaxGlyph = (v) => {
+    const b = document.querySelector('[data-win="max"]');
+    if (b) b.textContent = v ? '\u2750' : '\u25A1';
+    document.body.classList.toggle('is-max', !!v);
+  };
   const box = $('#win-controls');
   if (box) {
     box.hidden = false;
     box.querySelector('[data-win="min"]').onclick = () => winSend('minimize');
-    box.querySelector('[data-win="max"]').onclick = () => winSend('maximize');
+    box.querySelector('[data-win="max"]').onclick = () => { shellMax = !shellMax; applyMaxGlyph(shellMax); winSend('maximize'); };
     box.querySelector('[data-win="close"]').onclick = () => winSend('close');
   }
+  // 边缘缩放 / 顶部拖动：页面自己判定，再把命中的 HT 码交给宿主窗口（WebView2 会吃掉 WM_NCHITTEST）
+  const EDGE = 6, DRAG_H = 14;
+  const hitFor = (x, y, w, h) => {
+    if (y <= EDGE) return x <= EDGE ? 13 : (x >= w - EDGE ? 14 : 12);
+    if (y >= h - EDGE) return x <= EDGE ? 16 : (x >= w - EDGE ? 17 : 15);
+    if (x <= EDGE) return 10;
+    if (x >= w - EDGE) return 11;
+    if (y <= DRAG_H) return 2;
+    return 0;
+  };
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const ht = hitFor(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+    if (!ht) return;
+    e.preventDefault();
+    winSend('hit:' + ht);
+  }, true);
+  document.addEventListener('dblclick', (e) => {
+    if (e.clientY <= DRAG_H) { e.preventDefault(); shellMax = !shellMax; applyMaxGlyph(shellMax); winSend('maximize'); }
+  }, true);
+  shellHost.addEventListener('message', (e) => {
+    const d = e.data || {};
+    if (d.type !== 'shell') return;
+    shellMax = !!d.max;
+    applyMaxGlyph(shellMax);
+  });
 }
 
 /* ---------------- 启动 ---------------- */

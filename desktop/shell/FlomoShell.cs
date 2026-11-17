@@ -78,6 +78,7 @@ namespace FlomoShell
                 core.Settings.IsZoomControlEnabled = true;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 core.WebMessageReceived += OnWebMessage;
+                core.NavigationCompleted += (s, args) => PostState();
                 core.NewWindowRequested += (s, args) =>
                 {
                     // 站内链接一律在当前窗口打开，外链交给系统浏览器
@@ -106,16 +107,38 @@ namespace FlomoShell
         {
             string json;
             try { json = e.WebMessageAsJson ?? ""; } catch { return; }
+            var hit = System.Text.RegularExpressions.Regex.Match(json, "\"hit:(\\d+)\"");
+            if (hit.Success)
+            {
+                StartSystemHit(int.Parse(hit.Groups[1].Value));
+                return;
+            }
             if (json.IndexOf("\"minimize\"", StringComparison.Ordinal) >= 0) WindowState = FormWindowState.Minimized;
             else if (json.IndexOf("\"maximize\"", StringComparison.Ordinal) >= 0) ToggleMaximize();
             else if (json.IndexOf("\"close\"", StringComparison.Ordinal) >= 0) Close();
-            else if (json.IndexOf("\"drag\"", StringComparison.Ordinal) >= 0) BeginDrag();
+            else if (json.IndexOf("\"drag\"", StringComparison.Ordinal) >= 0) StartSystemHit(HTCAPTION);
         }
 
-        private void BeginDrag()
+        /// <summary>把拖动/缩放交给系统窗口循环（页面在边缘按下时发 hit:N 过来）</summary>
+        private void StartSystemHit(int ht)
         {
-            Native.ReleaseCapture();
-            Native.SendMessage(Handle, 0x00A1 /* WM_NCLBUTTONDOWN */, (IntPtr)HTCAPTION, IntPtr.Zero);
+            try
+            {
+                Native.ReleaseCapture();
+                Native.SendMessage(Handle, 0x00A1 /* WM_NCLBUTTONDOWN */, (IntPtr)ht, IntPtr.Zero);
+            }
+            catch { }
+        }
+
+        private void PostState()
+        {
+            try
+            {
+                if (_web == null || _web.CoreWebView2 == null) return;
+                _web.CoreWebView2.PostWebMessageAsJson(
+                    "{\"type\":\"shell\",\"max\":" + ((_isMax || WindowState == FormWindowState.Maximized) ? "true" : "false") + "}");
+            }
+            catch { }
         }
 
         private void ToggleMaximize()
@@ -133,7 +156,8 @@ namespace FlomoShell
                 WindowState = FormWindowState.Normal;
                 Bounds = Screen.FromControl(this).WorkingArea;
             }
-            ApplyRegionRounding();
+            ApplyRoundedCorners();
+            PostState();
         }
 
         protected override CreateParams CreateParams
@@ -166,67 +190,33 @@ namespace FlomoShell
             return Environment.OSVersion.Version.Build >= 22000;
         }
 
-        /// <summary>Win11 用 DWM 圆角；Win10 退回窗口区域裁剪</summary>
+        /// <summary>Win11 用 DWM 的圆角（抗锯齿）；Win10 退回区域裁剪</summary>
         private void ApplyRoundedCorners()
         {
             if (IsWin11())
             {
                 try
                 {
-                    int pref = 1;   // DONOTROUND：圆角由我们自己裁，避免和区域裁剪叠加
+                    int pref = (_isMax || WindowState == FormWindowState.Maximized) ? 1 : 2;   // DONOTROUND / ROUND
                     Native.DwmSetWindowAttribute(Handle, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref pref, 4);
                     int none = unchecked((int)0xFFFFFFFE);   // DWMWA_COLOR_NONE：不要系统边框线
                     Native.DwmSetWindowAttribute(Handle, 34 /* DWMWA_BORDER_COLOR */, ref none, 4);
+                    Native.SetWindowRgn(Handle, IntPtr.Zero, true);   // 清掉可能存在的旧区域
+                    return;
                 }
                 catch { }
             }
             ApplyRegionRounding();
         }
 
-        /// <summary>超椭圆（曲率连续）窗口区域：Windows 自带的圆角是正圆弧，这里是 squircle</summary>
+        /// <summary>Win10 兜底：正圆弧区域裁剪</summary>
         private void ApplyRegionRounding()
         {
             try
             {
                 if (_isMax || WindowState == FormWindowState.Maximized) { Native.SetWindowRgn(Handle, IntPtr.Zero, true); return; }
-                const int radius = 22;
-                const int steps = 28;
-                const double exp = 4.0;      // |x|^exp + |y|^exp = 1，4 接近 iOS 的连续曲率
-                int w = Width, h = Height, r = Math.Min(radius, Math.Min(w, h) / 2);
-                var pts = new System.Collections.Generic.List<Native.POINT>(steps * 4 + 4);
-
-                // 顺时针：左上（0,r → r,0）→ 右上（w-r,0 → w,r）→ 右下（w,h-r → w-r,h）→ 左下（r,h → 0,h-r）
-                for (int i = 0; i <= steps; i++)   // 左上
-                {
-                    double t = Math.PI / 2 * i / steps;
-                    double dx = Math.Pow(Math.Cos(t), 2.0 / exp) * r;
-                    double dy = Math.Pow(Math.Sin(t), 2.0 / exp) * r;
-                    pts.Add(new Native.POINT((int)Math.Round(r - dx), (int)Math.Round(r - dy)));
-                }
-                for (int i = 0; i <= steps; i++)   // 右上
-                {
-                    double t = Math.PI / 2 * (1.0 - (double)i / steps);
-                    double dx = Math.Pow(Math.Cos(t), 2.0 / exp) * r;
-                    double dy = Math.Pow(Math.Sin(t), 2.0 / exp) * r;
-                    pts.Add(new Native.POINT((int)Math.Round(w - r + dx), (int)Math.Round(r - dy)));
-                }
-                for (int i = 0; i <= steps; i++)   // 右下
-                {
-                    double t = Math.PI / 2 * i / steps;
-                    double dx = Math.Pow(Math.Cos(t), 2.0 / exp) * r;
-                    double dy = Math.Pow(Math.Sin(t), 2.0 / exp) * r;
-                    pts.Add(new Native.POINT((int)Math.Round(w - r + dx), (int)Math.Round(h - r + dy)));
-                }
-                for (int i = 0; i <= steps; i++)   // 左下
-                {
-                    double t = Math.PI / 2 * (1.0 - (double)i / steps);
-                    double dx = Math.Pow(Math.Cos(t), 2.0 / exp) * r;
-                    double dy = Math.Pow(Math.Sin(t), 2.0 / exp) * r;
-                    pts.Add(new Native.POINT((int)Math.Round(r - dx), (int)Math.Round(h - r + dy)));
-                }
-
-                var arr = pts.ToArray();
-                var rgn = Native.CreatePolygonRgn(arr, arr.Length, 2 /* WINDING */);
+                const int radius = 16;
+                var rgn = Native.CreateRoundRectRgn(0, 0, Width + 1, Height + 1, radius * 2, radius * 2);
                 if (rgn != IntPtr.Zero) Native.SetWindowRgn(Handle, rgn, true);
             }
             catch { }
