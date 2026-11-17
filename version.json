@@ -1,6 +1,6 @@
 {
-  "version": "2.2.0",
-  "notes": "新增：洞察完成后可继续追问 AI；右侧面板默认「对话」；换新图标（紫色底白色「拾」）",
+  "version": "2.3.0",
+  "notes": "融合设计稿：新图标（紫色圆角方块 + 开口 n）、侧栏品牌标记、主色改 Iris #6255D9、去掉项目里的 flomo 提法",
   "url": "https://github.com/Nitgomare/Notidea/releases/latest",
   "released_at": "2026-11-17"
 }

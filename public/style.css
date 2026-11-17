@@ -2,22 +2,22 @@
   --paper: #f3f3f7;
   --paper-2: #f9f9fc;
   --card: #ffffff;
-  --ink: #15151d;
+  --ink: #25233d;
   --ink-2: #4a4a5c;
-  --muted: #8e8ea3;
+  --muted: #77738e;
   --line: #e3e3ee;
   --line-2: #ececf3;
-  --accent: #5b4cf5;
+  --accent: #6255d9;
   --accent-2: #14c3a2;
   --accent-3: #ff6fb1;
-  --accent-soft: #efedff;
-  --accent-ink: #3626c9;
+  --accent-soft: #eeecfa;
+  --accent-ink: #4b3fbd;
   --lime: #d6ff3d;
   --amber: #f5a524;
   --danger: #e5484d;
-  --tag: #4a3de0;
-  --tag-bg: #efedff;
-  --grad: linear-gradient(135deg, #6a5bff 0%, #8b5cf6 45%, #14c3a2 100%);
+  --tag: #4b3fbd;
+  --tag-bg: #eeecfa;
+  --grad: linear-gradient(135deg, #6255d9 0%, #7b6ee8 60%, #6255d9 100%);
   --grad-soft: linear-gradient(135deg, rgba(106, 91, 255, .12), rgba(20, 195, 162, .10));
   --shadow: 0 1px 2px rgba(22, 20, 50, .04), 0 8px 24px -10px rgba(40, 30, 120, .12);
   --shadow-lg: 0 24px 60px -18px rgba(40, 30, 120, .32), 0 4px 14px rgba(22, 20, 50, .06);
@@ -1526,3 +1526,14 @@ body.shell .day-sep button { -webkit-app-region: no-drag; }
 .update-dialog .update-notes { max-height: 220px; margin: 4px 0 6px; }
 .update-dialog h3 b { font-family: inherit; color: var(--accent); }
 #up-status { min-height: 16px; margin: 2px 0 4px; }
+
+/* ---------- 品牌区：设计稿的「开口 n」标记 + 拾念 + notidea ---------- */
+.brand-logo {
+  width: 26px; height: 26px; display: inline-flex; align-self: center;
+  color: var(--accent); margin-right: 2px;
+}
+.brand-logo svg { width: 100%; height: 100%; }
+.brand-suffix {
+  background: var(--accent-soft); color: var(--accent);
+  text-transform: lowercase; letter-spacing: 1.2px;
+}
