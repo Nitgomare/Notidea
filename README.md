@@ -28,6 +28,24 @@ PORT=8080 node server.js
 
 桌面快捷方式由 `tools/make-shortcut.ps1` 生成：它会去注册表读**真实的桌面路径**（有的机器把「桌面」重定向到 D 盘），再在那里建 `flomo local.lnk`，旧位置残留的会一并删掉。桌面被搬走后重跑一次即可。
 
+### macOS
+
+macOS 版是同一个 Node 服务，只是启动方式和更新脚本换成了 POSIX 版本（需要本机 Node 22.5+，`brew install node`）：
+
+```bash
+unzip flomo-local-<版本>-mac.zip -d flomo-local && cd flomo-local
+chmod +x start.command start-server.command
+./start.command            # 独立窗口（Edge/Chrome --app）
+./start-server.command     # 或只起服务，浏览器访问 http://127.0.0.1:7777
+```
+
+- 桌面快捷方式：设置 → 创建桌面快捷方式，会在 `~/Desktop` 生成 `flomo local.command`。
+- 自动更新：`data/update/apply.sh`（解压用 `ditto`/`unzip`，覆盖程序文件后重启服务），日志在 `data/update/apply.log`。
+- 打开导出的 `.ics` / JSON：走系统 `open`，交给「日历」或默认应用。
+- 浏览器路径找 `~/Applications` 与 `/Applications` 下的 Edge / Chrome / Chromium / Brave，都没有就用 `open` 打开默认浏览器。
+- 跨平台差异集中在 `lib/platform.js`（浏览器路径、profile 目录、`open` 命令、桌面目录），Windows 行为不变。
+
+
 首次打开点左下角「设置」，填三样：
 
 | 项 | 示例 |

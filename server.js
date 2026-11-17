@@ -8,6 +8,8 @@ const { URL } = require('url');
 
 const dbm = require('./db');
 const { version: APP_VERSION } = require('./version');
+const platform = require('./lib/platform');
+const IS_WIN = process.platform === 'win32';
 
 // 版本号以磁盘上的 version.js 为准（更新脚本替换文件后无需重启即可读到新值）
 function currentVersion() {
@@ -193,7 +195,7 @@ function writeIcs(c, memo) {
 }
 
 /* ---------------- 在真正的桌面建快捷方式（设置里的按钮） ---------------- */
-function makeShortcut() {
+function makeShortcutWin() {
   const script = path.join(__dirname, 'tools', 'make-shortcut.ps1');
   if (!fs.existsSync(script)) return Promise.reject(new Error('缺少 tools/make-shortcut.ps1'));
   return new Promise((resolve, reject) => {
@@ -213,6 +215,38 @@ function makeShortcut() {
       else reject(new Error(out.trim() || ('powershell 退出码 ' + code)));
     });
   });
+}
+
+// macOS / Linux：桌面上放一个 .command，双击就起服务并开独立窗口
+function makeShortcutPosix() {
+  return new Promise((resolve, reject) => {
+    try {
+      const dir = platform.desktopDir();
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'flomo local.command');
+      const body = [
+        '#!/bin/sh',
+        '# flomo local 启动器（双击运行）',
+        'cd "' + __dirname + '" || exit 1',
+        'if ! command -v node >/dev/null 2>&1; then',
+        '  echo "需要 Node.js 22.5 或更高版本：brew install node"',
+        '  read -r -p "按回车关闭…" _',
+        '  exit 1',
+        'fi',
+        'exec node "' + path.join(__dirname, 'desktop', 'launcher.js') + '"',
+        '',
+      ].join('\n');
+      fs.writeFileSync(file, body, 'utf8');
+      fs.chmodSync(file, 0o755);
+      resolve({ path: file, output: '已创建：' + file });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function makeShortcut() {
+  return IS_WIN ? makeShortcutWin() : makeShortcutPosix();
 }
 
 const MIME = {
@@ -459,13 +493,19 @@ async function route(req, res) {
         if (info.error) return json(res, 502, { error: '检查更新失败：' + info.error });
         if (!info.hasUpdate) return json(res, 400, { error: '已经是最新版本' });
         const dl = await downloadUpdate(info);
-        const vbs = writeApplyScript(dl.zip);
+        const updater = IS_WIN ? writeApplyScript(dl.zip) : writeApplyShell(dl.zip);
         const latest = info.latest;
         setTimeout(() => {
           try {
-            spawn('wscript.exe', [vbs], {
-              detached: true, stdio: 'ignore', windowsHide: true, cwd: __dirname,
-            }).unref();
+            if (IS_WIN) {
+              spawn('wscript.exe', [updater], {
+                detached: true, stdio: 'ignore', windowsHide: true, cwd: __dirname,
+              }).unref();
+            } else {
+              spawn('/bin/sh', [updater], {
+                detached: true, stdio: 'ignore', cwd: __dirname,
+              }).unref();
+            }
           } catch (e) { /* 交给用户手动重启 */ }
           setTimeout(() => process.exit(0), 300);
         }, 500);
@@ -524,7 +564,7 @@ async function route(req, res) {
         if (body.calendar && c) {
           try {
             const file = writeIcs(c, dbm.getMemo(memo.id));
-            spawn('cmd.exe', ['/c', 'start', '""', file], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+            platform.openPath(file);
           } catch (e) { /* 日历打不开不影响保存 */ }
         }
       }
@@ -652,7 +692,7 @@ async function route(req, res) {
       const memo = dbm.getMemo(c.memo_id);
       const file = writeIcs(c, memo);
       try {
-        spawn('cmd.exe', ['/c', 'start', '""', file], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+        platform.openPath(file);
         return json(res, 200, { ok: true, file });
       } catch (e) { return json(res, 500, { error: '打不开日历：' + e.message, file }); }
     }
@@ -927,6 +967,48 @@ function writeApplyScript(zipPath) {
   ].join('\r\n');
   fs.writeFileSync(vbsPath, vbs, 'utf8');
   return vbsPath;
+}
+
+// macOS / Linux 的更新脚本：解压 → 覆盖程序文件（保留 data 与 runtime）→ 重启
+function writeApplyShell(zipPath) {
+  const dir = path.join(__dirname, 'data', 'update');
+  const src = path.join(dir, 'app');
+  const sh = path.join(dir, 'apply.sh');
+  const q = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+  const lines = [
+    '#!/bin/sh',
+    '# flomo local 更新脚本（macOS / Linux）',
+    'ROOT=' + q(__dirname),
+    'ZIP=' + q(zipPath),
+    'SRC=' + q(src),
+    'NODE=' + q(process.execPath),
+    'LOG="$ROOT/data/update/apply.log"',
+    'say() { printf "[%s] %s\\n" "$(date +%H:%M:%S)" "$*" >> "$LOG" 2>/dev/null; }',
+    'say "apply start: $ZIP"',
+    'say "waiting for old server to exit"',
+    'sleep 2',
+    'rm -rf "$SRC"; mkdir -p "$SRC"',
+    'if command -v ditto >/dev/null 2>&1; then ditto -x -k "$ZIP" "$SRC" >>"$LOG" 2>&1; else unzip -q -o "$ZIP" -d "$SRC" >>"$LOG" 2>&1; fi',
+    'if [ ! -f "$SRC/server.js" ]; then',
+    '  say "extract FAILED: $ZIP"',
+    'else',
+    '  for f in server.js db.js llm.js version.js README.md; do',
+    '    [ -f "$SRC/$f" ] && cp -f "$SRC/$f" "$ROOT/$f"',
+    '  done',
+    '  for d in lib prompts public assets desktop tools; do',
+    '    if [ -d "$SRC/$d" ]; then mkdir -p "$ROOT/$d"; cp -R "$SRC/$d/." "$ROOT/$d/" 2>>"$LOG"; fi',
+    '  done',
+    '  say "copied; version.json = $(cat "$ROOT/version.json" 2>/dev/null)"',
+    'fi',
+    'cd "$ROOT" || exit 1',
+    'nohup "$NODE" "$ROOT/server.js" >>"$ROOT/data/server.log" 2>&1 &',
+    'say "restarted"',
+    'rm -f "$ZIP"; rm -rf "$SRC"',
+    '',
+  ];
+  fs.writeFileSync(sh, lines.join('\n'), 'utf8');
+  fs.chmodSync(sh, 0o755);
+  return sh;
 }
 
 const server = http.createServer((req, res) => {

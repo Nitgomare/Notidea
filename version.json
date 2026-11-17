@@ -1,6 +1,6 @@
 {
-  "version": "1.3.2",
-  "notes": "更新下载增加镜像回退（GitHub 资产域名被解析到 127.0.0.1 时改走 jsDelivr / raw）；下载失败时给出手动下载链接；含 1.3.1 与 1.3.0 的全部修复",
+  "version": "1.3.3",
+  "notes": "新增 macOS 版（start.command 启动、独立窗口、POSIX 更新脚本，需 Node 22.5+）；跨平台差异收进 lib/platform.js；Windows 行为不变",
   "url": "https://github.com/Nitgomare/flomo-local/releases/latest",
-  "released_at": "2026-11-16"
+  "released_at": "2026-11-17"
 }
