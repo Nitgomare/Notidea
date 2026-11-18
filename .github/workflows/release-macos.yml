@@ -45,7 +45,10 @@ jobs:
           NOTES
           sha=$(gh api repos/Nitgomare/Notidea/actions/runs/44239828787 --jq .head_sha)
           test "$(gh api repos/Nitgomare/Notidea/actions/runs/44239828787 --jq .conclusion)" = success
-          gh release create v3.2.2-macos release-assets/* --target "$sha" --title 'Notidea v3.2.2 macOS' --notes-file release-notes.md --draft
-          gh api repos/Nitgomare/Notidea/releases/tags/v3.2.2-macos > release.json
+          if ! gh release view v3.2.2-macos --json databaseId >/dev/null 2>&1; then
+            gh release create v3.2.2-macos release-assets/* --target "$sha" --title 'Notidea v3.2.2 macOS' --notes-file release-notes.md --draft
+          fi
+          id=$(gh release view v3.2.2-macos --json databaseId --jq .databaseId)
+          gh api "repos/Nitgomare/Notidea/releases/$id" > release.json
           node -e 'const fs=require("fs"),crypto=require("crypto"),r=JSON.parse(fs.readFileSync("release.json")); if(r.assets.length!==5)throw Error("asset count");for(const a of r.assets){const h=crypto.createHash("sha256").update(fs.readFileSync("release-assets/"+a.name)).digest("hex");if(a.digest!=="sha256:"+h)throw Error("digest mismatch: "+a.name);console.log("Verified",a.name,h)}'
           gh release edit v3.2.2-macos --draft=false --latest=false
