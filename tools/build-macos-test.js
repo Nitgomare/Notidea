@@ -54,6 +54,6 @@ test('cleanup cannot target user-selected paths', () => {
   assert.match(script, /out="\$\(mktemp -d "\$root\/dist\/macos-/);
 });
 test('macOS archive, architecture, icon and ad-hoc signing contracts', () => {
-  for (const text of ['arm64|x64', '^24\\.[0-9]+\\.[0-9]+$', 'lipo -verify_arch', 'runtime/node', 'iconutil -c icns', 'CFBundleDisplayName Notidea', 'CFBundleIdentifier app.notidea.desktop', 'codesign --force --deep --sign - --preserve-metadata=entitlements', 'codesign --verify --deep --strict', 'ditto -c -k --sequesterRsrc --keepParent', 'hdiutil verify', 'NOT Developer ID signed or notarized']) assert.ok(script.includes(text), text);
+  for (const text of ['arm64|x64', '^24\\.[0-9]+\\.[0-9]+$', 'lipo "$payload/runtime/node" -verify_arch "$mach_arch"', 'lipo "$app/Contents/MacOS/Electron" -verify_arch "$mach_arch"', 'runtime/node', 'iconutil -c icns', 'CFBundleDisplayName Notidea', 'CFBundleIdentifier app.notidea.desktop', 'codesign --force --deep --sign - --preserve-metadata=entitlements', 'codesign --verify --deep --strict', 'ditto -c -k --sequesterRsrc --keepParent', 'hdiutil verify', 'NOT Developer ID signed or notarized']) assert.ok(script.includes(text), text);
 });
 console.log(`${tests} offline packaging contract tests passed; real macOS build/launch is NOT tested.`);

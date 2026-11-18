@@ -84,8 +84,8 @@ for notice in LICENSE LICENSES.chromium.html; do
 done
 chmod 755 "$payload/runtime/node"
 mach_arch="$arch"; [ "$arch" != x64 ] || mach_arch=x86_64
-lipo -verify_arch "$mach_arch" "$payload/runtime/node"
-lipo -verify_arch "$mach_arch" "$app/Contents/MacOS/Electron"
+lipo "$payload/runtime/node" -verify_arch "$mach_arch"
+lipo "$app/Contents/MacOS/Electron" -verify_arch "$mach_arch"
 for size in 16 32 128 256 512; do
   sips -z "$size" "$size" "$root/assets/icon.png" --out "$work/Notidea.iconset/icon_${size}x${size}.png" >/dev/null
   double=$((size * 2))
