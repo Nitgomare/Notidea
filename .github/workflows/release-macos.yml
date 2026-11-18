@@ -1,0 +1,51 @@
+name: Publish macOS release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download tested build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 44239828787 --dir packages
+      - name: Prepare and publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          for arch in arm64 x64; do
+            source="packages/Notidea-macos-${arch}-44239828787-1"
+            for ext in dmg app.zip; do
+              file=$(find "$source" -name "Notidea.$ext" -type f)
+              test -f "$file"
+              cp "$file" "release-assets/notidea-3.2.2-macos-${arch}.${ext}"
+            done
+          done
+          (cd release-assets && sha256sum * > SHA256SUMS.txt)
+          cat > release-notes.md <<'NOTES'
+          ## Notidea 3.2.2 macOS
+          首个 macOS 版本，包含 Apple Silicon (arm64) 与 Intel (x64) 的 DMG 和应用 ZIP。
+          下载对应芯片的 DMG，将 Notidea 拖入“应用程序”。应用内版本仍为 3.2.2。
+          
+          - 原生菜单、窗口、Command+Q 退出与 Dock 唤回。
+          - 数据保存在用户 Application Support/Notidea，手动替换应用不会删除笔记。
+          - 两种架构均通过 macOS 15 原生打包、签名完整性检查、启动及后台退出冒烟测试。
+          - 构建来源：https://github.com/Nitgomare/Notidea/actions/runs/44239828787
+          
+          **仅 ad-hoc 签名，未做 Apple Developer ID 签名或公证。** Gatekeeper 可能阻止首次打开；仅在确认来源后使用系统“隐私与安全性”的允许打开功能。人工视觉、输入法和日常体验验收尚未完成。
+          此独立 macOS Release 不替换 Windows v3.2.2，不设为默认 Latest。
+          NOTES
+          sha=$(gh api repos/Nitgomare/Notidea/actions/runs/44239828787 --jq .head_sha)
+          test "$(gh api repos/Nitgomare/Notidea/actions/runs/44239828787 --jq .conclusion)" = success
+          gh release create v3.2.2-macos release-assets/* --target "$sha" --title 'Notidea v3.2.2 macOS' --notes-file release-notes.md --draft
+          gh api repos/Nitgomare/Notidea/releases/tags/v3.2.2-macos > release.json
+          node -e 'const fs=require("fs"),crypto=require("crypto"),r=JSON.parse(fs.readFileSync("release.json")); if(r.assets.length!==5)throw Error("asset count");for(const a of r.assets){const h=crypto.createHash("sha256").update(fs.readFileSync("release-assets/"+a.name)).digest("hex");if(a.digest!=="sha256:"+h)throw Error("digest mismatch: "+a.name);console.log("Verified",a.name,h)}'
+          gh release edit v3.2.2-macos --draft=false --latest=false
