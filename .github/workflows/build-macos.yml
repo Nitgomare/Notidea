@@ -1,0 +1,67 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS 14 retired from GitHub Actions on 2026-11-02.
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.arch }}
+      - name: Verify native runner and Node
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          node -e 'if (process.platform !== "darwin" || process.arch !== process.env.TARGET_ARCH || process.versions.node.split(".")[0] !== "24") process.exit(1); console.log(process.platform, process.arch, process.version)'
+          uname -a
+      - name: Cross-platform regression tests
+        run: |
+          node tools/mac-platform-test.js
+          node tools/build-macos-test.js
+          node --test tools/shell-lifecycle-test.js tools/mac-shell-test.js
+      - name: Build app archive and DMG
+        run: bash tools/build-macos.sh --arch '${{ matrix.arch }}' --dmg
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Notidea-macos-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/macos-*-${{ matrix.arch }}-*/Notidea.app.zip
+            dist/macos-*-${{ matrix.arch }}-*/Notidea.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Smoke test packaged application
+        timeout-minutes: 3
+        run: node tools/mac-packaged-smoke.js '${{ matrix.arch }}'
+      - name: Upload smoke diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Notidea-macos-${{ matrix.arch }}-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/notidea-smoke-*/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7

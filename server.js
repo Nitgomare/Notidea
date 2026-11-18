@@ -10,6 +10,8 @@ const dbm = require('./db');
 const { version: APP_VERSION } = require('./version');
 const platform = require('./lib/platform');
 const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
+const MAC_UPDATE_NOTE = 'macOS 请前往 Release 下载适合本机芯片的安装包，退出拾念后手动替换应用程序中的 Notidea.app。请勿删除数据目录；现有笔记和数据目录配置会保留。';
 const shellLifecycle = require('./lib/shell-lifecycle').createService(__dirname);
 
 // 版本号以磁盘上的 version.js 为准（更新脚本替换文件后无需重启即可读到新值）
@@ -482,6 +484,7 @@ async function route(req, res) {
       return json(res, 200, { name: '拾念', version: currentVersion() });
     }
     if (p === '/api/shortcut' && req.method === 'POST') {
+      if (IS_MAC) return json(res, 400, { error: 'macOS 请将应用拖入“应用程序”，再拖到 Dock；也可在 Finder 中创建替身。' });
       try {
         const r = await makeShortcut();
         return json(res, 200, { ok: true, path: r.path });
@@ -490,6 +493,7 @@ async function route(req, res) {
       }
     }
     if (p === '/api/update/apply' && req.method === 'POST') {
+      if (IS_MAC) return json(res, 400, { error: MAC_UPDATE_NOTE, manualUpdate: true, url: UPDATE_RELEASE_URL, dataDir: DATA_DIR });
       if (!shellLifecycle.beginUpdate()) return json(res, 409, { error: '正在更新或退出，请稍后重试' });
       let handedOff = false;
       try {
@@ -893,7 +897,8 @@ async function checkUpdate(force) {
       hasUpdate,
       notes: info.notes,
       url: info.url,
-      asset: hasUpdate ? UPDATE_APP_ZIP(latest) : '',
+      asset: hasUpdate && !IS_MAC ? UPDATE_APP_ZIP(latest) : '',
+      ...(IS_MAC ? { manualUpdate: true, updateNote: MAC_UPDATE_NOTE } : {}),
       checkedAt: Date.now(),
     };
     updateCache = { at: Date.now(), data };
@@ -940,6 +945,7 @@ async function fetchUpdateZip(url) {
 }
 
 async function downloadUpdate(info) {
+  if (IS_MAC) throw new Error(MAC_UPDATE_NOTE);
   const dir = path.join(__dirname, 'data', 'update');
   fs.mkdirSync(dir, { recursive: true });
   const zip = path.join(dir, 'app.zip');
@@ -1041,6 +1047,7 @@ function writeApplyScript(zipPath) {
 
 // macOS / Linux 的更新脚本：解压 → 覆盖程序文件（保留 data 与 runtime）→ 重启
 function writeApplyShell(zipPath) {
+  if (IS_MAC) throw new Error(MAC_UPDATE_NOTE);
   const dir = path.join(__dirname, 'data', 'update');
   const src = path.join(dir, 'app');
   const sh = path.join(dir, 'apply.sh');
@@ -1094,7 +1101,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  notidea 已启动  →  http://${HOST}:${PORT}\n  数据目录: ${path.join(__dirname, 'data')}\n`);
+  console.log(`\n  notidea 已启动  →  http://${HOST}:${PORT}\n  数据目录: ${DATA_DIR}\n`);
 });
 
 // 自检：程序文件被删 / 被移走时主动退出，避免“页面能开、接口全挂”的僵尸服务占着端口

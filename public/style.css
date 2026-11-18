@@ -1447,6 +1447,8 @@ body.shell .win-controls button svg {
 body.shell .win-controls button:hover { background: rgba(31, 41, 51, .08); color: var(--ink); }
 body.shell .win-controls button[data-win="close"]:hover { background: #e5484d; color: #fff; }
 body.shell .sidebar { padding-top: 18px; }
+body.mac-shell .win-controls { display: none; }
+body.mac-shell .topbar { padding-right: 0; }
 
 /* 侧栏底栏：单个齿轮按钮 */
 .side-foot #btn-settings { flex: 0 0 auto; width: 42px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-2); }

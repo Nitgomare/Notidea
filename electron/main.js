@@ -14,7 +14,9 @@ const lifecycle = require('../lib/shell-lifecycle');
 const APP_DIR = path.join(__dirname, '..');
 const PORT = Number(process.env.PORT || 7777);
 const APP_URL = 'http://127.0.0.1:' + PORT;
-const STATE_FILE = path.join(APP_DIR, 'data', 'shell-window.json');
+const IS_MAC = process.platform === 'darwin';
+const STATE_DIR = IS_MAC ? path.join(app.getPath('appData'), 'Notidea', 'desktop-state') : path.join(APP_DIR, 'data');
+const STATE_FILE = path.join(STATE_DIR, 'shell-window.json');
 const BG = '#f3f3f7';
 
 let win = null;
@@ -76,6 +78,7 @@ function ping() {
 
 function nodeExe() {
   const candidates = [
+    ...(IS_MAC ? [path.join(APP_DIR, 'runtime', 'node')] : []),
     path.join(APP_DIR, 'node.exe'),
     path.join(APP_DIR, 'runtime', 'node.exe'),
   ];
@@ -84,7 +87,7 @@ function nodeExe() {
 }
 
 async function ensureServer() {
-  control = lifecycle.credentials(APP_DIR);
+  control = lifecycle.credentials(APP_DIR, STATE_DIR);
   if (await ping()) {
     let status;
     try { status = await lifecycle.request(PORT, control); }
@@ -95,8 +98,8 @@ async function ensureServer() {
     }
     return;
   }
-  fs.mkdirSync(path.join(APP_DIR, 'data'), { recursive: true });
-  const log = fs.openSync(path.join(APP_DIR, 'data', 'server.log'), 'a');
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const log = fs.openSync(path.join(STATE_DIR, 'server.log'), 'a');
   serverProc = spawn(nodeExe(), [path.join(APP_DIR, 'server.js')], {
     cwd: APP_DIR,
     stdio: ['ignore', log, log],
@@ -148,6 +151,7 @@ function saveBounds() {
 
 // 无边框窗口最大化时 Electron 会超出工作区 8px（WS_THICKFRAME 的隐形边框），钳回工作区，避免压住任务栏
 function clampMaximized() {
+  if (IS_MAC) return;
   if (!win || win.isDestroyed() || !win.isMaximized()) return;
   try {
     const wa = screen.getDisplayMatching(win.getBounds()).workArea;
@@ -167,7 +171,7 @@ async function createWindow() {
     ...bounds,
     minWidth: 720,
     minHeight: 520,
-    frame: false,
+    frame: IS_MAC,
     show: false,
     icon: path.join(APP_DIR, 'assets', 'icon.png'),
     backgroundColor: BG,
@@ -244,8 +248,8 @@ ipcMain.on('shell', (_event, action) => {
 
 function logTray(line) {
   try {
-    fs.mkdirSync(path.join(APP_DIR, 'data'), { recursive: true });
-    fs.appendFileSync(path.join(APP_DIR, 'data', 'tray.log'), new Date().toISOString() + ' ' + line + '\n');
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.appendFileSync(path.join(STATE_DIR, 'tray.log'), new Date().toISOString() + ' ' + line + '\n');
   } catch (e) { }
 }
 
@@ -260,7 +264,8 @@ function createTray() {
   if (tray) return;
   const ico = path.join(APP_DIR, 'assets', 'notidea.ico');
   const png = path.join(APP_DIR, 'assets', 'icon-32.png');
-  let img = nativeImage.createFromPath(ico);
+  let img = nativeImage.createFromPath(IS_MAC ? png : ico);
+  if (IS_MAC && !img.isEmpty()) img = img.resize({ width: 18, height: 18 });
   if (img.isEmpty()) img = nativeImage.createFromPath(png);
   try {
     tray = new Tray(img);
@@ -280,9 +285,14 @@ function createTray() {
   tray.on('double-click', showWindow);
 }
 
-app.setAppUserModelId('com.notidea.app');
+if (!IS_MAC) app.setAppUserModelId('com.notidea.app');
 
+app.on('activate', showWindow);
 app.whenReady().then(() => {
+  if (IS_MAC) Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'Notidea', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { label: '退出 Notidea', accelerator: 'Command+Q', click: requestQuit }] },
+    { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
+  ]));
   createTray();
   return createWindow();
 });

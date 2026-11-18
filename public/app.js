@@ -1480,6 +1480,12 @@ $('#btn-check-update').onclick = async () => {
     if (!current()) return;
     updateState.message = '';
     if (r.error) { note.textContent = '检查失败：' + r.error + '（离线也能正常用）'; return; }
+    if (r.manualUpdate) {
+      note.innerHTML = (r.hasUpdate ? '发现新版本 v' + escapeHtml(r.latest) + '。' : '当前已是最新版本。') +
+        escapeHtml(r.updateNote || 'macOS 请退出后手动替换应用，数据保留。') +
+        ' <a href="https://github.com/Nitgomare/Notidea/releases/latest" target="_blank" rel="noreferrer">打开下载页</a>';
+      return;
+    }
     if (r.hasUpdate) {
       // 新版介绍是 Markdown（release notes），渲染出来，别直接塞纯文本
       var notesHtml = r.notes ? '<div class="md update-notes">' + renderMarkdown(r.notes) + '</div>' : '';
@@ -1856,6 +1862,10 @@ const shellBridge = (() => {
 
 if (shellBridge) {
   document.body.classList.add('shell');
+  if (window.__shell?.platform === 'darwin') {
+    document.body.classList.add('mac-shell');
+    $('#search').placeholder = '⌘K';
+  }
   const ICON_MAX = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.6" y="3.6" width="8.8" height="8.8" rx="2"/></svg>';
   const ICON_RESTORE = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.6" y="5.2" width="8.2" height="8.2" rx="1.8"/><path d="M5.2 5.2V4a1.5 1.5 0 0 1 1.5-1.5h4.6A1.5 1.5 0 0 1 12.8 4v4.6a1.5 1.5 0 0 1-1.5 1.5h-1.1"/></svg>';
   const applyMaxGlyph = (v) => {
@@ -1886,6 +1896,7 @@ async function promptUpdate(r) {
   const skip = $('#up-skip');
   const later = $('#up-later');
   const now = $('#up-now');
+  now.textContent = r.manualUpdate ? '查看更新说明' : '下载并安装';
   skip.onclick = () => {
     try { localStorage.setItem(UPDATE_SKIP_KEY, r.latest); } catch (e) { /* 忽略 */ }
     dlg.close();
@@ -1894,6 +1905,7 @@ async function promptUpdate(r) {
   now.onclick = async () => {
     dlg.close();
     $('#btn-settings').onclick();
+    if (r.manualUpdate) { $('#btn-check-update').click(); return; }
     await installUpdate($('#up-status'), now);
   };
   renderUpdateState();
